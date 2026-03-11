@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Tod family map v5</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+html,body{height:100%;margin:0;font-family:Arial,sans-serif;}
+#app{display:flex;height:100%;position:relative;}
+#sidebar{width:410px;overflow:auto;padding:12px 14px;box-sizing:border-box;background:#f7f7f9;border-right:1px solid #d0d0d0;}
+#map{flex:1;height:100%;}
+h1{font-size:20px;margin:0 0 8px 0;}
+.small{font-size:12px;color:#555;line-height:1.35;}
+.control{margin:10px 0 14px 0;}
+label{display:block;font-weight:600;margin-bottom:4px;}
+input[type="text"], select{width:100%;padding:6px 8px;box-sizing:border-box;}
+input[type="range"]{width:100%;}
+button{padding:7px 10px;cursor:pointer;}
+.row{display:flex;gap:8px;align-items:center;}
+.row > div{flex:1;}
+#branchBox{max-height:56px;overflow:auto;border:1px solid #ccc;background:#fff;padding:6px;border-radius:4px;}
+.branch-item{display:flex;align-items:center;gap:8px;padding:2px 0;font-weight:400;}
+.branch-item .count{color:#666;font-size:11px;margin-left:auto;}
+.swatch{width:18px;height:10px;border-radius:3px;display:inline-block;}
+.note{font-size:11px;color:#666;}
+.range-values{font-size:12px;color:#444;margin-top:4px;}
+#summary{padding:8px 10px;background:#fff;border:1px solid #ddd;border-radius:6px;line-height:1.4;}
+#detailHint{margin-top:12px;border-top:1px solid #ddd;padding-top:10px;}
+.detail-event{padding:6px 0;border-top:1px solid #eee;}
+.detail-event:first-child{border-top:none;}
+.pill{display:inline-block;padding:2px 6px;border-radius:10px;background:#eef3ff;font-size:11px;margin-right:4px;}
+.same-area-list{max-height:220px;overflow:auto;border-top:1px solid #ddd;margin-top:8px;padding-top:6px;}
+.same-area-list button{display:block;width:100%;text-align:left;background:none;border:none;padding:4px 0;color:#0b57d0;}
+.radio-row{display:flex;gap:12px;flex-wrap:wrap;}
+.radio-row label, .check-row label{font-weight:400;margin-bottom:0;display:flex;align-items:center;gap:5px;}
+.check-row{display:flex;gap:12px;flex-wrap:wrap;}
+.leaflet-popup-content{max-height:340px;overflow:auto;}
+.area-bubble{background:rgba(11,87,208,0.5);color:#fff;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:1px solid #000;}
+.search-results{margin-top:8px;max-height:210px;overflow:auto;border:1px solid #d6dbe6;border-radius:6px;background:#fff;display:none;}
+.search-results.active{display:block;}
+.search-result{padding:7px 8px;border-top:1px solid #eef1f6;cursor:pointer;}
+.search-result:first-child{border-top:none;}
+.search-result:hover{background:#f5f8ff;}
+.search-result .meta{font-size:11px;color:#5f6775;}
+.leaflet-tooltip.node-tooltip{background:rgba(17,24,39,0.92);border:0;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.24);padding:6px 8px;border-radius:6px;font-size:12px;line-height:1.35;}
+.leaflet-tooltip.node-tooltip:before{border-top-color:rgba(17,24,39,0.92)!important;}
+
+hr{border:none;border-top:1px solid #ddd;margin:10px 0;}
+#floatingDetail{position:absolute;right:16px;top:16px;z-index:1000;width:370px;max-height:calc(100% - 32px);overflow:auto;padding:12px 14px;box-sizing:border-box;background:rgba(255,255,255,0.97);border:1px solid #cfcfd4;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.16);backdrop-filter:blur(3px);transition:width 0.15s ease,padding 0.15s ease;}
+#floatingDetail.collapsed{width:38px;padding:10px 6px;overflow:hidden;}
+#floatingDetail.collapsed .detail-body{display:none;}
+#floatingDetail .panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;}
+#floatingDetail.collapsed .panel-head{justify-content:center;}
+#floatingDetail .panel-title{font-size:13px;color:#444;}
+#floatingDetail .collapse-btn{padding:2px 6px;line-height:1;font-size:16px;min-width:24px;}
+.rel-section{margin-top:10px;}
+.rel-list{font-size:12px;line-height:1.45;color:#333;}
+.rel-list div{margin:2px 0;}
+.rel-list button{display:block;width:100%;text-align:left;background:none;border:none;padding:2px 0;color:#0b57d0;}
+#statusChip{position:absolute;left:430px;top:12px;z-index:1100;background:rgba(17,24,39,0.88);color:#fff;padding:7px 10px;border-radius:999px;font-size:12px;box-shadow:0 6px 16px rgba(0,0,0,0.22);opacity:0;transform:translateY(-4px);transition:opacity .18s ease,transform .18s ease;}
+#statusChip.active{opacity:1;transform:translateY(0);}
+@media (max-width: 1200px){#floatingDetail{width:320px;} #statusChip{left:12px;top:auto;bottom:12px;}}
+</style>
+</head>
+<body>
+<div id="app">
+<div id="sidebar">
+<h1>Family migration map</h1>
+<div class="small">Default home person is Tod Poirier. Historical mode shows direct ancestors, siblings of those ancestors, and spouses in the same scope. Modern mode shows the broader modern family (1850+) from the GEDCOM.</div>
+
+<div class="control">
+<label for="modeSelect">Map data</label>
+<select id="modeSelect">
+<option value="historical" selected>Historical information</option>
+<option value="modern">Full modern family (1850+)</option>
+<option value="full">Full GEDCOM (everyone)</option>
+</select>
+</div>
+
+<div class="control">
+<label for="homeInput">Home person</label>
+<div class="row">
+<div><input id="homeInput" type="text" list="peopleList" value="Tod Poirier"/></div>
+<div style="flex:0 0 auto"><button id="setHomeBtn">Set home</button></div>
+</div>
+<div class="small">Anyone in the tree can be set as the home person.</div>
+</div>
+
+<div class="control">
+<label for="focusInput">Find a person</label>
+<div class="row">
+<div><input id="focusInput" type="text" list="peopleList" placeholder="Search or pick a person"/></div>
+<div style="flex:0 0 auto"><button id="focusBtn">Focus</button></div>
+</div>
+</div>
+
+<datalist id="peopleList"></datalist>
+
+<div class="control">
+<label for="placeSearchInput">Find a place</label>
+<div class="row">
+<div><input id="placeSearchInput" type="text" placeholder="Village, town, address, country"/></div>
+<div style="flex:0 0 auto"><button id="placeSearchBtn">Go</button></div>
+</div>
+<div id="placeSearchResults" class="search-results small"></div>
+<div class="small">Search your tree first, then fall back to live map search for outside places.</div>
+</div>
+
+
+<div class="control">
+<label>Line side</label>
+<div class="radio-row">
+<label><input type="radio" name="side" value="all" checked/> All</label>
+<label><input type="radio" name="side" value="paternal"/> Paternal</label>
+<label><input type="radio" name="side" value="maternal"/> Maternal</label>
+</div>
+</div>
+
+<div class="control">
+<label>People type</label>
+<div class="check-row">
+<label><input id="showDirect" type="checkbox" checked/> Direct ancestors</label>
+<label><input id="showSiblings" type="checkbox" checked/> Siblings of direct ancestors</label>
+<label><input id="showSpouses" type="checkbox" checked/> Spouses</label>
+</div>
+</div>
+
+<div class="control">
+<label>Branches</label>
+<div class="row" style="margin-bottom:6px; align-items:flex-start;">
+<div><input id="branchSearch" type="text" placeholder="Filter branch names"/></div>
+<div style="flex:0 0 auto"><button id="allBranchesBtn">All</button></div>
+<div style="flex:0 0 auto"><button id="clearBranchesBtn">None</button></div>
+</div>
+<div id="branchBox"></div>
+</div>
+
+<div class="control">
+<label>Generation depth</label>
+<input id="genDepth" type="range" min="1" max="63" value="63"/>
+<div class="range-values">Showing up to generation <span id="genVal">63</span> of <span id="genMaxVal">63</span></div>
+</div>
+
+<div class="control">
+<label>Date range</label>
+<div class="row">
+<div><input id="dateMin" type="range"/></div>
+<div><input id="dateMax" type="range"/></div>
+</div>
+<div class="range-values"><span id="dateMinVal"></span> to <span id="dateMaxVal"></span></div>
+</div>
+
+<div class="control">
+<label>Map layers</label>
+<div class="check-row">
+<label><input id="showPaths" type="checkbox"/> All life paths</label>
+<label><input id="showConnectors" type="checkbox" checked/> Parent-child</label>
+<label><input id="showAreaBubbles" type="checkbox" checked/> Area bubbles</label>
+<label><input id="hideBroadOnly" type="checkbox"/> Hide broad-only points</label>
+</div>
+</div>
+
+<div id="summary"></div><div class="small" style="margin-top:8px;color:#5b6472;">By default the map shows only the selected person\u2019s movement path. Turn on <em>All life paths</em> if you want the full spaghetti bowl.</div>
+<div id="detailHint"><div class="small">Selected person details appear in the floating panel on the right.</div></div>
+</div>
+<div id="map"></div>
+<div id="statusChip" class="active">Status: Loading family data…</div>
+
+<div id="floatingDetail">
+  <div class="panel-head">
+    <div class="panel-title">Selected person</div>
+    <button id="collapseDetailBtn" class="collapse-btn" title="Collapse">−</button>
+  </div>
+  <div class="detail-body"><div class="small">Click a person, event, or crowded location bubble to see details here.</div></div>
+</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+</script>
+<script src="tod_family_viewer_data_part14.js"></script>
+<script>
+if (!window.FAMILY_DATA) {
+  document.getElementById('map').innerHTML = '<div style="padding:24px;font:14px Arial,sans-serif;color:#444;">Map data file is missing. Keep the split HTML and JS together in the same folder, or use the bundle zip and extract both files together.</div>';
+  throw new Error('FAMILY_DATA missing');
+}
+const { DEFAULT_HOME_ID, PEOPLE, EVENTS, MODERN_IDS } = window.FAMILY_DATA;
+const peopleById = new Map(PEOPLE.map(p => [p.id, p]));
+const peopleByName = new Map();
+for (const p of PEOPLE) { if (!peopleByName.has(p.name)) peopleByName.set(p.name, p.id); }
+
+const eventsByPerson = new Map();
+for (const ev of EVENTS) { if (!eventsByPerson.has(ev.pid)) eventsByPerson.set(ev.pid, []); eventsByPerson.get(ev.pid).push(ev); }
+
+const samplePersonByBranch = new Map();
+for (const p of PEOPLE) { if (p.branch && !samplePersonByBranch.has(p.branch)) samplePersonByBranch.set(p.branch, p.id); }
+
+const localPlaceIndex = (() => {
+  const idx = new Map();
+  for (const ev of EVENTS) {
+    if (ev.lat == null || ev.lon == null || ev.visible === false) continue;
+    for (const raw of [ev.placeOrig, ev.placeStd, ev.areaKey]) {
+      const key = String(raw || '').trim();
+      if (!key || key === 'Unknown place') continue;
+      const k = key.toLowerCase();
+      if (!idx.has(k)) idx.set(k, {label:key, lat:ev.lat, lon:ev.lon, count:0, kinds:new Set(), people:new Set()});
+      const row = idx.get(k);
+      row.count += 1;
+      row.kinds.add(ev.type || 'event');
+      row.people.add(ev.pid);
+      if (row.label.length < key.length) row.label = key;
+    }
+  }
+  return [...idx.values()].sort((a,b)=>a.label.localeCompare(b.label));
+})();
+
+
+function setStatus(msg, hold = false) {
+  const el = document.getElementById('statusChip');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('active');
+  if (state.statusTimer) clearTimeout(state.statusTimer);
+  if (!hold) state.statusTimer = setTimeout(() => el.classList.remove('active'), 1600);
+}
+function clearPlaceSearchMarker() {
+  if (state.placeSearchMarker) { map.removeLayer(state.placeSearchMarker); state.placeSearchMarker = null; }
+}
+window.clearPlaceSearchMarker = clearPlaceSearchMarker;
+function ordinal(n) { const s=['th','st','nd','rd']; const v=n%100; return `${n}${s[(v-20)%10]||s[v]||s[0]}`; }
+function ancestorTitle(gen, sex, neutralOnly=false) {
+  const male = neutralOnly ? 'parent' : 'father';
+  const female = neutralOnly ? 'parent' : 'mother';
+  const neutral = 'parent';
+  if (gen <= 1) return 'self';
+  if (gen === 2) return sex === 'M' ? male : sex === 'F' ? female : neutral;
+  const gbase = neutralOnly ? 'grandparent' : (sex === 'M' ? 'grandfather' : sex === 'F' ? 'grandmother' : 'grandparent');
+  if (gen === 3) return gbase;
+  const greats = gen - 3;
+  const prefix = greats === 1 ? 'great-' : `${ordinal(greats)} great-`;
+  return `${prefix}${gbase}`;
+}
+function avuncularTitle(gen, sex) {
+  if (gen === 2) return sex === 'M' ? 'uncle' : sex === 'F' ? 'aunt' : 'aunt/uncle';
+  const base = sex === 'M' ? 'uncle' : sex === 'F' ? 'aunt' : 'aunt/uncle';
+  if (gen === 3) return `grand${base}`;
+  const greats = gen - 3;
+  const prefix = greats === 1 ? 'great-grand' : `${ordinal(greats)} great-grand`;
+  return `${prefix}${base}`;
+}
+function setSelectedPerson(pid, {pan=true, redraw=true, activateLines=true} = {}) {
+  state.focusedPersonId = pid;
+  state.selectedPersonId = pid;
+  if (activateLines || state.mode !== 'full') state.lineFocusId = pid;
+  showDetails(pid);
+  const marker = currentMarkerRefs.get(pid);
+  if (pan) {
+    if (marker) map.panTo(marker.getLatLng());
+    else { const ev = bestEventForPerson(pid, true) || bestEventForPerson(pid, false); if (ev) map.panTo([ev.lat, ev.lon]); }
+  }
+  if (redraw) render(false);
+}
+function activeLinePersonId() { return state.mode === 'full' ? (state.lineFocusId || null) : (state.lineFocusId || state.selectedPersonId || state.homeId); }
+function drawArrowHead(layer, fromLatLng, toLatLng, color, opacity = 0.7, sizePx = 8) {
+  if (!fromLatLng || !toLatLng) return;
+  const a = map.latLngToLayerPoint(L.latLng(fromLatLng));
+  const b = map.latLngToLayerPoint(L.latLng(toLatLng));
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (!len || len < 8) return;
+  const ux = dx / len, uy = dy / len;
+  const bx = b.x - ux * sizePx, by = b.y - uy * sizePx;
+  const px = -uy, py = ux;
+  const w = sizePx * 0.65;
+  const left = L.point(bx + px * w, by + py * w);
+  const right = L.point(bx - px * w, by - py * w);
+  const tip = b;
+  L.polygon([map.layerPointToLatLng(left), map.layerPointToLatLng(tip), map.layerPointToLatLng(right)], {stroke:false, fill:true, fillColor:color, fillOpacity:opacity, interactive:false}).addTo(layer);
+}
+
+function tooltipHtmlForEvent(ev) {
+  const when = ev.date || (ev.y0===ev.y1 ? ev.y0 : `${ev.y0 ?? '?'}–${ev.y1 ?? '?'}`);
+  return `<div><strong>${esc(ev.name)}</strong></div><div>${esc(ev.type)}${when ? ` · ${esc(String(when))}` : ''}</div><div>${esc(ev.placeOrig || ev.placeStd || 'Unknown place')}</div>`;
+}
+
+function tooltipHtmlForArea(rows) {
+  const first = rows[0];
+  const people = new Set(rows.map(r => r.pid)).size;
+  return `<div><strong>${esc(first.areaKey || first.placeStd || first.placeOrig || 'Mapped area')}</strong></div><div>${people} people · ${rows.length} visible events</div>`;
+}
+
+function branchRenderKey(scope, ctl) {
+  return JSON.stringify({mode:state.mode, home:state.homeId, side:ctl.side, direct:ctl.showDirect, sib:ctl.showSiblings, sp:ctl.showSpouses, search:(document.getElementById('branchSearch').value||'').toLowerCase().trim(), included:(scope?.included?.size||0), selected:[...state.selectedBranches].sort()});
+}
+
+async function runPlaceSearch() {
+  const q = (document.getElementById('placeSearchInput').value || '').trim();
+  const box = document.getElementById('placeSearchResults');
+  if (!q) { box.innerHTML=''; box.classList.remove('active'); return; }
+  const ql = q.toLowerCase();
+  const local = localPlaceIndex.filter(r => r.label.toLowerCase().includes(ql)).slice(0,8).map(r => ({source:'Tree', label:r.label, meta:`${r.people.size} people · ${r.count} events`, lat:r.lat, lon:r.lon}));
+  box.innerHTML = local.map((r,i)=>`<div class="search-result" data-source="${r.source}" data-idx="${i}"><div><strong>${esc(r.label)}</strong></div><div class="meta">${esc(r.source)} · ${esc(r.meta)}</div></div>`).join('') || '<div class="search-result"><div class="meta">Searching live map results…</div></div>';
+  box.classList.add('active');
+  box.querySelectorAll('.search-result[data-idx]').forEach(el => el.onclick = () => choosePlaceResult(local[Number(el.dataset.idx)]));
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    const data = await res.json();
+    const remote = (data || []).map(r => ({source:'Map', label:r.display_name, meta:r.type || 'search result', lat:Number(r.lat), lon:Number(r.lon)}));
+    const combined = [...local, ...remote].slice(0,12);
+    box.innerHTML = combined.length ? combined.map((r,i)=>`<div class="search-result" data-idx="${i}"><div><strong>${esc(r.label)}</strong></div><div class="meta">${esc(r.source)} · ${esc(r.meta)}</div></div>`).join('') : '<div class="search-result"><div class="meta">No matching places found.</div></div>';
+    box.classList.add('active');
+    box.querySelectorAll('.search-result[data-idx]').forEach(el => el.onclick = () => choosePlaceResult(combined[Number(el.dataset.idx)]));
+  } catch (err) {
+    if (!local.length) {
+      box.innerHTML = '<div class="search-result"><div class="meta">Live map search unavailable right now.</div></div>';
+      box.classList.add('active');
+    }
+  }
+}
+
+function choosePlaceResult(row) {
+  if (!row || row.lat == null || row.lon == null) return;
+  if (state.placeSearchMarker) { map.removeLayer(state.placeSearchMarker); state.placeSearchMarker = null; }
+  state.placeSearchMarker = L.circleMarker([row.lat, row.lon], {radius:9, color:'#111827', fillColor:'#f59e0b', fillOpacity:0.85, weight:2}).addTo(map);
+  state.placeSearchMarker.bindPopup(`<div><strong>${esc(row.label)}</strong></div><div class="small">${esc(row.source)}${row.meta ? ' · ' + esc(row.meta) : ''}</div><div style="margin-top:8px;"><button onclick="clearPlaceSearchMarker()">Clear this marker</button></div>`).openPopup();
+  map.setView([row.lat, row.lon], Math.max(map.getZoom(), 8));
+}
+
+const childrenByParent = new Map();
+const siblingsByPerson = new Map();
+const parentKeyToChildren = new Map();
+for (const p of PEOPLE) {
+  if (p.father) { if (!childrenByParent.has(p.father)) childrenByParent.set(p.father, new Set()); childrenByParent.get(p.father).add(p.id); }
+  if (p.mother) { if (!childrenByParent.has(p.mother)) childrenByParent.set(p.mother, new Set()); childrenByParent.get(p.mother).add(p.id); }
+  if (p.father || p.mother) {
+    const key = `${p.father||''}|${p.mother||''}`;
+    if (!parentKeyToChildren.has(key)) parentKeyToChildren.set(key, []);
+    parentKeyToChildren.get(key).push(p.id);
+  }
+}
+for (const [key, kids] of parentKeyToChildren.entries()) {
+  for (const kid of kids) {
+    if (!siblingsByPerson.has(kid)) siblingsByPerson.set(kid, new Set());
+    for (const other of kids) if (other !== kid) siblingsByPerson.get(kid).add(other);
+  }
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function eventMid(ev) { if (ev.y0 == null && ev.y1 == null) return null; if (ev.y0 == null) return ev.y1; if (ev.y1 == null) return ev.y0; return (ev.y0 + ev.y1) / 2; }
+function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+function eventInRange(ev, yMin, yMax) { if (ev.y1 != null && ev.y1 < yMin) return false; if (ev.y0 != null && ev.y0 > yMax) return false; if (ev.y0 != null || ev.y1 != null) return true; const p = peopleById.get(ev.pid) || {}; if (p.maxYear != null && p.maxYear < yMin) return false; if (p.minYear != null && p.minYear > yMax) return false; return p.minYear != null || p.maxYear != null; }
+function lifeYears(pid) { const p = peopleById.get(pid) || {}; const a = p.minYear ?? '?'; const b = p.maxYear ?? '?'; return `(${a}–${b})`; }
+
+const state = { mode: 'historical', homeId: DEFAULT_HOME_ID, selectedBranches: new Set(), focusedPersonId: DEFAULT_HOME_ID, currentScope: null, initializedDates: false, selectedPersonId: DEFAULT_HOME_ID, lineFocusId: DEFAULT_HOME_ID, placeSearchMarker: null, branchRenderKey: null, statusTimer: null };
+
+function buildPeopleList() {
+  const dl = document.getElementById('peopleList'); dl.innerHTML = '';
+  const names = [...peopleByName.keys()].sort((a,b)=>a.localeCompare(b));
+  for (const name of names) { const opt = document.createElement('option'); opt.value = name; dl.appendChild(opt); }
+}
+
+
+function cloneScopeMaps(base) {
+  return {
+    included: new Set(base.included || []),
+    gen: new Map(base.gen || []),
+    rel: new Map(base.rel || []),
+    side: new Map([...(base.side || new Map()).entries()].map(([k,v]) => [k, new Set(v)])),
+  };
+}
+
+function modernEligible(pid) {
+  const p = peopleById.get(pid);
+  if (!p) return false;
+  if (pid === state.homeId) return true;
+  const maxY = p.maxYear, minY = p.minYear;
+  if (maxY == null && minY == null) return true;
+  if (maxY != null && maxY >= 1850) return true;
+  if (minY != null && minY >= 1850) return true;
+  return false;
+}
+
+function relationText(pid) {
+  const scope = state.currentScope;
+  if (!scope) return '—';
+  const p = peopleById.get(pid) || {};
+  if (pid === state.homeId) return 'Home person';
+  const rel = scope.rel.get(pid) || 'other';
+  const g = scope.gen.get(pid) || null;
+  const sideSet = [...(scope.side.get(pid) || [])].filter(s => s !== 'home');
+  const sideTxt = sideSet.length ? ` (${sideSet.join('/')})` : '';
+  if (rel === 'direct') return `${ancestorTitle(g, p.sex)}${sideTxt}`;
+  if (rel === 'sibling') return `${avuncularTitle(g, p.sex)}${sideTxt}`;
+  if (rel === 'spouse') return `${g ? `Spouse of ${ancestorTitle(g, null, true)}` : 'Spouse in selected family scope'}${sideTxt}`;
+  if (rel === 'blood') return `Blood relative in selected family scope${sideTxt}`;
+  return `Related person${sideTxt}`;
+}
+
+function computeAncestorScope(homeId) {
+  const included = new Set([homeId]);
+  const gen = new Map([[homeId, 1]]);
+  const rel = new Map([[homeId, 'home']]);
+  const side = new Map([[homeId, new Set(['home'])]]);
+  const q = [];
+  const hp = peopleById.get(homeId);
+  if (hp?.father && peopleById.has(hp.father)) { included.add(hp.father); gen.set(hp.father, 2); rel.set(hp.father, 'direct'); side.set(hp.father, new Set(['paternal'])); q.push(hp.father); }
+  if (hp?.mother && peopleById.has(hp.mother)) { included.add(hp.mother); gen.set(hp.mother, 2); rel.set(hp.mother, 'direct'); side.set(hp.mother, new Set(['maternal'])); q.push(hp.mother); }
+  while (q.length) {
+    const pid = q.shift(); const g = gen.get(pid) || 2; const pp = peopleById.get(pid);
+    for (const par of [pp?.father, pp?.mother]) {
+      if (!par || !peopleById.has(par)) continue; const newGen = g + 1; let changed = false;
+      if (!included.has(par)) { included.add(par); changed = true; }
+      if (!gen.has(par) || newGen < gen.get(par)) { gen.set(par, newGen); changed = true; }
+      if (!rel.has(par)) { rel.set(par, 'direct'); changed = true; }
+      const cur = side.get(par) || new Set(); const src = side.get(pid) || new Set(); const before = cur.size;
+      for (const s of src) if (s !== 'home') cur.add(s);
+      if (cur.size !== before) { side.set(par, cur); changed = true; }
+      if (changed) q.push(par);
+    }
+  }
+  return {included, gen, rel, side};
+}
+
+function computeHistoricalScope(homeId) {
+  const base = computeAncestorScope(homeId);
+  const included = new Set(base.included);
+  const gen = new Map(base.gen);
+  const rel = new Map(base.rel);
+  const side = new Map();
+  for (const [k,v] of base.side.entries()) side.set(k, new Set(v));
+
+  for (const pid of [...base.included]) {
+    const sibs = siblingsByPerson.get(pid); if (!sibs) continue;
+    for (const sib of sibs) {
+      if (!peopleById.has(sib)) continue;
+      included.add(sib);
+      if (!gen.has(sib)) gen.set(sib, gen.get(pid) || 1);
+      if (!rel.has(sib)) rel.set(sib, 'sibling');
+      const cur = side.get(sib) || new Set(); const src = side.get(pid) || new Set();
+      if (pid === homeId && src.has('home')) { cur.add('paternal'); cur.add('maternal'); }
+      else for (const s of src) if (s !== 'home') cur.add(s);
+      if (cur.size) side.set(sib, cur);
+    }
+  }
+  for (const pid of [...included]) {
+    const p = peopleById.get(pid); const spouses = p?.spouses || [];
+    for (const sp of spouses) {
+      if (!peopleById.has(sp)) continue;
+      included.add(sp);
+      if (!gen.has(sp)) gen.set(sp, gen.get(pid) || 1);
+      if (!rel.has(sp)) rel.set(sp, 'spouse');
+      const cur = side.get(sp) || new Set(); const src = side.get(pid) || new Set();
+      for (const s of src) if (s !== 'home') cur.add(s);
+      if (cur.size) side.set(sp, cur);
+    }
+  }
+  let genMax = 1; for (const v of gen.values()) genMax = Math.max(genMax, v);
+  return {included, gen, rel, side, genMax};
+}
+
+function computeModernScope(homeId) {
+  const anc = computeAncestorScope(homeId);
+  const included = new Set();
+  const gen = new Map();
+  const rel = new Map();
+  const side = new Map();
+
+  // seed ancestors + home for traversal
+  const q = [...anc.included];
+  const seen = new Set(q);
+  for (const pid of q) {
+    gen.set(pid, anc.gen.get(pid) || 1);
+    rel.set(pid, anc.rel.get(pid) || (pid === homeId ? 'home' : 'direct'));
+    side.set(pid, new Set(anc.side.get(pid) || []));
+    if (modernEligible(pid)) included.add(pid);
+  }
+
+  while (q.length) {
+    const pid = q.shift();
+    const p = peopleById.get(pid);
+    if (!p) continue;
+    const parentGen = gen.get(pid) || 1;
+    const inherited = new Set(side.get(pid) || []);
+    const nextSide = new Set([...inherited].filter(s => s !== 'home'));
+    if (inherited.has('home')) { nextSide.add('paternal'); nextSide.add('maternal'); }
+
+    for (const child of (p.children || [])) {
+      if (!peopleById.has(child) || seen.has(child)) continue;
+      seen.add(child);
+      q.push(child);
+      const childGen = Math.max(1, parentGen - 1);
+      if (!gen.has(child)) gen.set(child, childGen);
+      if (!rel.has(child)) rel.set(child, child === homeId ? 'home' : 'blood');
+      if (!side.has(child)) side.set(child, new Set(nextSide));
+      if (modernEligible(child)) included.add(child);
+    }
+  }
+
+  // add spouses for visible blood relatives/direct relatives/home
+  for (const pid of [...included]) {
+    const p = peopleById.get(pid); if (!p) continue;
+    const src = side.get(pid) || new Set();
+    for (const sp of (p.spouses || [])) {
+      if (!peopleById.has(sp)) continue;
+      included.add(sp);
+      if (!gen.has(sp)) gen.set(sp, gen.get(pid) || 1);
+      if (!rel.has(sp)) rel.set(sp, 'spouse');
+      const cur = side.get(sp) || new Set();
+      for (const s of src) if (s !== 'home') cur.add(s);
+      if (cur.size) side.set(sp, cur);
+    }
+  }
+
+  let genMax = 1; for (const v of gen.values()) genMax = Math.max(genMax, v);
+  return {included, gen, rel, side, genMax};
+}
+
+function computeFullScope(homeId) {
+  const included = new Set(PEOPLE.map(p => p.id));
+  const gen = new Map();
+  const rel = new Map();
+  const side = new Map();
+  for (const p of PEOPLE) { gen.set(p.id, 1); rel.set(p.id, p.id === homeId ? 'home' : 'other'); side.set(p.id, new Set()); }
+  return {included, gen, rel, side, genMax:1};
+}
+function computeScope(homeId) {
+  return state.mode === 'modern' ? computeModernScope(homeId) : state.mode === 'full' ? computeFullScope(homeId) : computeHistoricalScope(homeId);
+}
+
+function computeScopeCached(homeId) {
+  const key = `${state.mode}|${homeId}`;
+  if (!state.scopeCache) state.scopeCache = new Map();
+  if (!state.scopeCache.has(key)) state.scopeCache.set(key, computeScope(homeId));
+  return state.scopeCache.get(key);
+}
+function getScopeEvents(scope) {
+  const key = `${state.mode}|${state.homeId}`;
+  if (state.scopeEventsKey === key && state.scopeEventsCache) return state.scopeEventsCache;
+  state.scopeEventsKey = key;
+  const rows = EVENTS.filter(ev => scope.included.has(ev.pid) && ev.visible !== false && ev.lat != null && ev.lon != null);
+  const years = [];
+  for (const ev of rows) { if (ev.y0 != null) years.push(ev.y0); if (ev.y1 != null && ev.y1 !== ev.y0) years.push(ev.y1); }
+  state.scopeEventsCache = { rows, minYear: years.length ? Math.min(...years) : 58, maxYear: years.length ? Math.max(...years) : 2027 };
+  return state.scopeEventsCache;
+}
+
+function getCurrentControls() {
+  return { side: document.querySelector('input[name="side"]:checked')?.value || 'all', showDirect: document.getElementById('showDirect').checked, showSiblings: document.getElementById('showSiblings').checked, showSpouses: document.getElementById('showSpouses').checked, genDepth: Number(document.getElementById('genDepth').value), yMin: Number(document.getElementById('dateMin').value), yMax: Number(document.getElementById('dateMax').value), hideBroadOnly: document.getElementById('hideBroadOnly').checked };
+}
+
+
+function personSideCategory(pid) {
+  if (pid === state.homeId) return 'home';
+  const set = (state.currentScope && state.currentScope.side.get(pid)) || new Set();
+  if (set.has('paternal') && !set.has('maternal')) return 'paternal';
+  if (set.has('maternal') && !set.has('paternal')) return 'maternal';
+  if (set.has('paternal') && set.has('maternal')) return 'both';
+  return 'unknown';
+}
+
+function hashString(str) {
+  let h = 0;
+  str = String(str || '');
+  for (let i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = n => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => {
+    const color = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return Math.round(255 * color).toString(16).padStart(2, '0');
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+function branchHue(branch, sideCat) {
+  const h = hashString(branch);
+  const warm = [8, 18, 28, 38, 48];
+  const cool = [198, 210, 222, 234, 246];
+  const both = [270, 285, 300, 315];
+  if (sideCat === 'paternal') return warm[h % warm.length];
+  if (sideCat === 'maternal') return cool[h % cool.length];
+  if (sideCat === 'both') return both[h % both.length];
+  return 0;
+}
+
+function colorForPerson(pid) {
+  if (pid === state.homeId) return '#111827';
+  const p = peopleById.get(pid) || {};
+  const rel = (state.currentScope && state.currentScope.rel.get(pid)) || 'other';
+  const cat = personSideCategory(pid);
+  if (cat === 'unknown') return '#8a8f98';
+  const hue = branchHue(p.branch || p.name || pid, cat);
+  let sat = 68, light = 44;
+  if (rel === 'sibling') { sat = 58; light = 58; }
+  else if (rel === 'spouse') { sat = 54; light = 54; }
+  else if (rel === 'other') { sat = 46; light = 63; }
+  else if (rel === 'home') { sat = 0; light = 12; }
+  if (cat === 'both') { sat = Math.max(34, sat - 18); light = Math.min(68, light + 6); }
+  return hslToHex(hue, sat, light);
+}
+
+function lineColorForPerson(pid) {
+  return colorForPerson(pid);
+}
+
+
+
+function scopeBranches(scope) {
+  const out = new Set();
+  for (const pid of scope.included || []) {
+    const p = peopleById.get(pid);
+    if (p?.branch) out.add(p.branch);
+  }
+  return out;
+}
+
+function refreshBranchList(scope, ctl) {
+  const box = document.getElementById('branchBox'); const search = (document.getElementById('branchSearch').value || '').toLowerCase().trim(); const counts = new Map();
+  for (const pid of scope.included) {
+    const p = peopleById.get(pid); if (!p) continue; const rel = scope.rel.get(pid) || 'other';
+    if (rel === 'direct' && !ctl.showDirect && pid !== state.homeId) continue;
+    if (rel === 'sibling' && !ctl.showSiblings) continue;
+    if (rel === 'spouse' && !ctl.showSpouses) continue;
+    if (pid !== state.homeId) { const cat = personSideCategory(pid); if (ctl.side === 'paternal' && cat !== 'paternal') continue; if (ctl.side === 'maternal' && cat !== 'maternal') continue; }
+    counts.set(p.branch, (counts.get(p.branch) || 0) + 1);
+  }
+  const branches = [...counts.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  const branchSig = JSON.stringify([state.mode, state.homeId, ctl.side, ctl.showDirect, ctl.showSiblings, ctl.showSpouses, search, branches, [...state.selectedBranches].sort()]);
+  if (state.branchUiSig === branchSig) return;
+  state.branchUiSig = branchSig;
+  if (!state.selectedBranches.size) { for (const [b,c] of branches) state.selectedBranches.add(b); }
+  box.innerHTML = '';
+  for (const [branch, count] of branches) {
+    if (search && !branch.toLowerCase().includes(search)) continue;
+    const sampleId = samplePersonByBranch.get(branch);
+    const swatch = sampleId ? colorForPerson(sampleId) : '#888';
+    const div = document.createElement('div'); div.className = 'branch-item';
+    div.innerHTML = `<label style="display:flex;align-items:center;gap:8px;width:100%;font-weight:400;"><input type="checkbox" data-branch="${esc(branch)}" ${state.selectedBranches.has(branch)?'checked':''}/><span class="swatch" style="background:${swatch}"></span><span>${esc(branch)}</span><span class="count">${count}</span></label>`;
+    box.appendChild(div);
+  }
+  box.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener('change', () => { const branch = cb.getAttribute('data-branch'); if (cb.checked) state.selectedBranches.add(branch); else state.selectedBranches.delete(branch); state.branchUiSig = null; scheduleRender(false); }));
+}
+
+function isBroad(ev) { return ['country','province','state','region','historic-region'].includes(ev.precision) || ev.pointStyle === 'pale'; }
+
+function visiblePeopleAndEvents(scope, ctl, scopeEvents) {
+  const scopePeople = new Set(), visibleEvents = [];
+  for (const pid of scope.included) {
+    const p = peopleById.get(pid); if (!p) continue; const rel = scope.rel.get(pid) || 'other';
+    if (state.mode !== 'full') {
+      if (rel === 'direct' && !ctl.showDirect && pid !== state.homeId) continue;
+      if (rel === 'sibling' && !ctl.showSiblings) continue;
+      if (rel === 'spouse' && !ctl.showSpouses) continue;
+      const gen = scope.gen.get(pid) || 1; if (rel !== 'other' && gen > ctl.genDepth) continue;
+      if (pid !== state.homeId) { const cat = personSideCategory(pid); if (ctl.side === 'paternal' && cat !== 'paternal') continue; if (ctl.side === 'maternal' && cat !== 'maternal') continue; }
+    }
+    if (!state.selectedBranches.has(p.branch) && pid !== state.homeId) continue;
+    scopePeople.add(pid);
+  }
+  for (const ev of scopeEvents) {
+    if (ev.visible === false) continue;
+    if (!scopePeople.has(ev.pid)) continue;
+    if (ctl.hideBroadOnly && isBroad(ev)) continue;
+    if (state.mode !== 'full' && !eventInRange(ev, ctl.yMin, ctl.yMax)) continue;
+    visibleEvents.push(ev);
+  }
+  const mapPeople = new Set(visibleEvents.map(ev => ev.pid));
+  return {scopePeople, visiblePeople: mapPeople, visibleEvents};
+}
+
+function renderSummary(visiblePeople, visibleEvents, scopePeople = visiblePeople) {
+  const scope = state.currentScope; let direct=0,siblings=0,spouses=0,other=0;
+  for (const pid of visiblePeople) { const rel = scope.rel.get(pid) || 'other'; if (rel==='direct') direct++; else if (rel==='sibling') siblings++; else if (rel==='spouse') spouses++; else other++; }
+  document.getElementById('summary').innerHTML = `<strong>Visible now</strong><br/>${visiblePeople.size.toLocaleString()} people on map &middot; ${visibleEvents.length.toLocaleString()} mapped events${scopePeople && scopePeople.size !== visiblePeople.size ? `<br/><span class="small">${scopePeople.size.toLocaleString()} people survive the non-date filters</span>` : ''}<br/>Direct: ${direct.toLocaleString()} &middot; Siblings: ${siblings.toLocaleString()} &middot; Spouses: ${spouses.toLocaleString()}${(state.mode === 'modern' || state.mode === 'full') ? ` &middot; Other: ${other.toLocaleString()}` : ''}<br/>Mode: ${esc(state.mode)} &middot; Home: ${esc(peopleById.get(state.homeId)?.name || '')}`;
+}
+
+function sortedIds(ids) { return [...new Set(ids || [])].filter(id => peopleById.has(id)).sort((a,b)=>(peopleById.get(a).name||'').localeCompare(peopleById.get(b).name||'')); }
+function listHtml(label, ids) { const rows = sortedIds(ids); return `<div class="rel-section"><strong>${label}</strong><div class="rel-list">${rows.length ? rows.map(id => `<div><button onclick="selectPersonFromArea('${id}')">${esc(peopleById.get(id).name || id)} ${esc(lifeYears(id))}</button></div>`).join('') : '<div class="small">None listed.</div>'}</div></div>`; }
+
+function showDetails(pid) {
+  const p = peopleById.get(pid); if (!p) return; const ctl = getCurrentControls();
+  const evs = (eventsByPerson.get(pid) || []).filter(ev => ev.lat != null && ev.lon != null && (!ctl.hideBroadOnly || !isBroad(ev)) && eventInRange(ev, ctl.yMin, ctl.yMax));
+  evs.sort((a,b)=>(eventMid(a) ?? 99999) - (eventMid(b) ?? 99999));
+  const scope = state.currentScope; const rel = scope.rel.get(pid) || 'other'; const sideSet = [...(scope.side.get(pid) || [])].filter(x=>x!=='home'); const side = sideSet.join(', ') || (pid===state.homeId ? 'home' : '—');
+  const relationLabel = relationText(pid);
+  const htmlEvents = evs.map(ev => `<div class="detail-event"><div><span class="pill">${esc(ev.type)}</span> <strong>${esc(ev.date || (ev.y0===ev.y1 ? ev.y0 : `${ev.y0 ?? '?'}–${ev.y1 ?? '?'}`))}</strong></div><div>${esc(ev.placeOrig || ev.placeStd || 'Unknown place')}</div><div class="note">${esc(ev.note || '')}</div></div>`).join('');
+  const siblings = [...(siblingsByPerson.get(pid) || [])];
+  const html = `<div class="panel-head"><div class="panel-title">Selected person</div><button id="collapseDetailBtnInner" class="collapse-btn" title="Collapse">−</button></div><div class="detail-body"><div><strong>${esc(p.name)}</strong></div><div class="small">${esc(p.branch)} &middot; ${esc(relationLabel)} &middot; ${esc(side)}</div><div class="small">${esc(p.birthDate || '')} ${p.birthPlace ? '— ' + esc(p.birthPlace) : ''}</div><div class="small">${esc(p.deathDate || '')} ${p.deathPlace ? '— ' + esc(p.deathPlace) : ''}</div><hr/><div><strong>Visible events</strong></div>${htmlEvents || '<div class="small">No visible events in the current filters.</div>'}${listHtml('Parents', [p.father, p.mother].filter(Boolean))}${listHtml('Siblings', siblings)}${listHtml('Spouses', p.spouses || [])}${listHtml('Children', p.children || [])}</div>`;
+  const fd = document.getElementById('floatingDetail'); fd.innerHTML = html; fd.classList.remove('collapsed'); wireCollapseButtons(); document.querySelectorAll('#collapseDetailBtn, #collapseDetailBtnInner').forEach(b => { if (b) b.textContent = '−'; });
+}
+
+function popupHtmlForArea(rows) {
+  const names = []; const seen = new Set();
+  for (const row of rows) { if (seen.has(row.pid)) continue; seen.add(row.pid); const n = peopleById.get(row.pid)?.name || row.name; names.push(`<button onclick="selectPersonFromArea('${row.pid}')">${esc(n)} ${esc(lifeYears(row.pid))}</button>`); }
+  const first = rows[0];
+  return `<div><strong>${esc(first.areaKey || first.placeStd || first.placeOrig || 'Mapped area')}</strong></div><div class="small">${seen.size.toLocaleString()} people &middot; ${rows.length.toLocaleString()} visible events at this mapped area</div><div class="same-area-list"><strong>People at this mapped area</strong>${names.join('') || '<div class="small">None.</div>'}</div>`;
+}
+
+
+function eventSpecificityScore(ev) {
+  const prec = String(ev.precision || '');
+  const order = {site:0, address:0, town:1, county:2, medium:2, province:3, state:4, region:5, 'historic-region':5, country:6, unknown:7, none:9};
+  return order.hasOwnProperty(prec) ? order[prec] : 8;
+}
+function bestEventForPerson(pid, applyCurrentFilters) {
+  const ctl = getCurrentControls();
+  let rows = (eventsByPerson.get(pid) || []).filter(ev => ev.visible !== false && ev.lat != null && ev.lon != null);
+  if (applyCurrentFilters) rows = rows.filter(ev => (!ctl.hideBroadOnly || !isBroad(ev)) && eventInRange(ev, ctl.yMin, ctl.yMax));
+  rows = rows.slice().sort((a,b) => {
+    const sa = eventSpecificityScore(a), sb = eventSpecificityScore(b);
+    if (sa !== sb) return sa - sb;
+    const ya = eventMid(a), yb = eventMid(b);
+    if (ya != null && yb != null && ya !== yb) return yb - ya;
+    if (ya != null && yb == null) return -1;
+    if (ya == null && yb != null) return 1;
+    return 0;
+  });
+  return rows[0] || null;
+}
+window.selectPersonFromArea = function(pid) {
+  setSelectedPerson(pid, {pan:true, redraw:true, activateLines:true});
+  const marker = currentMarkerRefs.get(pid);
+  if (marker) marker.openPopup();
+};
+
+const map = L.map('map', { preferCanvas: true, zoomSnap: 0.25 }).setView([46.5, -87.6], 3);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+const eventLayer = L.layerGroup().addTo(map), pathLayer = L.layerGroup().addTo(map), connectorLayer = L.layerGroup().addTo(map), bubbleLayer = L.layerGroup().addTo(map);
+let currentMarkerRefs = new Map();
+
+function render(fitToData) {
+  state.currentScope = computeScopeCached(state.homeId); const scope = state.currentScope;
+  if (!state.selectedBranches.size) { for (const pid of scope.included) { const p = peopleById.get(pid); if (p?.branch) state.selectedBranches.add(p.branch); } }
+  const ctl = getCurrentControls();
+  const branchKey = branchRenderKey(scope, ctl);
+  if (state.branchRenderKey !== branchKey) { refreshBranchList(scope, ctl); state.branchRenderKey = branchKey; }
+  document.getElementById('genDepth').max = scope.genMax; if (Number(document.getElementById('genDepth').value) > scope.genMax) document.getElementById('genDepth').value = scope.genMax; document.getElementById('genVal').textContent = document.getElementById('genDepth').value; document.getElementById('genMaxVal').textContent = scope.genMax;
+  const scopeEventsObj = getScopeEvents(scope);
+  const scopeEvents = scopeEventsObj.rows;
+  const minAll = scopeEventsObj.minYear; const maxAll = scopeEventsObj.maxYear;
+  const dmin = document.getElementById('dateMin'); const dmax = document.getElementById('dateMax'); dmin.min = minAll; dmin.max = maxAll; dmax.min = minAll; dmax.max = maxAll;
+  if (!state.initializedDates) { dmin.value = minAll; dmax.value = maxAll; state.initializedDates = true; } else { dmin.value = clamp(Number(dmin.value), minAll, maxAll); dmax.value = clamp(Number(dmax.value), minAll, maxAll); if (Number(dmin.value) > Number(dmax.value)) dmin.value = dmax.value; }
+  document.getElementById('dateMinVal').textContent = dmin.value; document.getElementById('dateMaxVal').textContent = dmax.value;
+
+  setStatus('Status: Drawing map…', true);
+  const {scopePeople, visiblePeople, visibleEvents} = visiblePeopleAndEvents(scope, ctl, scopeEvents); renderSummary(visiblePeople, visibleEvents, scopePeople);
+  eventLayer.clearLayers(); pathLayer.clearLayers(); connectorLayer.clearLayers(); bubbleLayer.clearLayers(); currentMarkerRefs = new Map();
+
+  const renderBounds = map.getBounds().pad(0.28);
+  const forceIds = new Set([state.homeId, state.selectedPersonId, state.focusedPersonId].filter(Boolean));
+  const heavyViewportMode = visibleEvents.length > 1200;
+  const renderEvents = heavyViewportMode
+    ? visibleEvents.filter(ev => forceIds.has(ev.pid) || renderBounds.contains([ev.lat, ev.lon]))
+    : visibleEvents;
+
+  const areaMap = new Map();
+  const firstVisibleEventByPerson = new Map();
+  for (const ev of renderEvents) {
+    const key = `${ev.areaKey || ev.placeStd || ev.placeOrig}|${ev.lat}|${ev.lon}`; if (!areaMap.has(key)) areaMap.set(key, []); areaMap.get(key).push(ev);
+    const cur = firstVisibleEventByPerson.get(ev.pid);
+    if (!cur) { firstVisibleEventByPerson.set(ev.pid, ev); continue; }
+    const scEv = eventSpecificityScore(ev), scCur = eventSpecificityScore(cur);
+    const midEv = eventMid(ev), midCur = eventMid(cur);
+    if (scEv < scCur || (scEv === scCur && (midEv ?? 99999) < (midCur ?? 99999))) firstVisibleEventByPerson.set(ev.pid, ev);
+  }
+
+  {
+    const selectedLinePid = activeLinePersonId();
+    const showAllPaths = document.getElementById('showPaths').checked && state.mode !== 'full';
+    const pathTarget = showAllPaths ? null : selectedLinePid;
+    const personEvents = new Map();
+    for (const ev of (heavyViewportMode && showAllPaths ? renderEvents : visibleEvents)) {
+      if (pathTarget && ev.pid !== pathTarget) continue;
+      if (!pathTarget && !showAllPaths) continue;
+      if (!personEvents.has(ev.pid)) personEvents.set(ev.pid, []);
+      personEvents.get(ev.pid).push(ev);
+    }
+    for (const [pid, evs] of personEvents.entries()) {
+      const pts = evs.slice().sort((a,b)=>(eventMid(a) ?? 99999) - (eventMid(b) ?? 99999)).filter(ev=>ev.lat!=null&&ev.lon!=null);
+      if (pts.length > 1) {
+        const color = lineColorForPerson(pid); const pale = pts.every(isBroad);
+        L.polyline(pts.map(ev=>[ev.lat,ev.lon]), {color, weight: showAllPaths ? 2.5 : 3.2, opacity: pale ? 0.18 : (showAllPaths ? 0.5 : 0.78)}).addTo(pathLayer);
+        for (let i = 1; i < pts.length; i++) {
+          const arrowOpacity = showAllPaths ? 0.38 : 0.75;
+          if (!showAllPaths || i === pts.length - 1) drawArrowHead(pathLayer, [pts[i-1].lat, pts[i-1].lon], [pts[i].lat, pts[i].lon], color, pale ? Math.min(arrowOpacity, 0.22) : arrowOpacity, showAllPaths ? 6 : 8);
+        }
+      }
+    }
+  }
+
+  if (document.getElementById('showConnectors').checked) {
+    const selectedLinePid = activeLinePersonId();
+    const connectorPeople = state.mode === 'full' ? new Set(selectedLinePid ? [selectedLinePid] : []) : (heavyViewportMode ? new Set(renderEvents.map(ev => ev.pid)) : visiblePeople);
+    for (const pid of connectorPeople) {
+      const p = peopleById.get(pid); if (!p) continue;
+      const childEv = firstVisibleEventByPerson.get(pid); if (!childEv) continue;
+      for (const par of [p.father, p.mother]) {
+        if (!par || !visiblePeople.has(par) || (state.mode !== 'full' && heavyViewportMode && !connectorPeople.has(par))) continue;
+        const parentEv = firstVisibleEventByPerson.get(par); if (!parentEv) continue;
+        const color = lineColorForPerson(pid); const pale = isBroad(childEv) || isBroad(parentEv);
+        L.polyline([[childEv.lat, childEv.lon],[parentEv.lat,parentEv.lon]], {color, weight: 1.4, opacity: pale ? 0.12 : 0.33, dashArray: '4,4'}).addTo(connectorLayer);
+        drawArrowHead(connectorLayer, [childEv.lat, childEv.lon], [parentEv.lat,parentEv.lon], color, pale ? 0.16 : 0.4, 6);
+      }
+    }
+  }
+
+  for (const [key, rows] of areaMap.entries()) {
+    const first = rows[0]; const uniquePeople = new Set(rows.map(r => r.pid));
+    if (rows.length > 1 && document.getElementById('showAreaBubbles').checked) {
+      const icon = L.divIcon({className:'', html:`<div class="area-bubble" style="width:30px;height:30px;">${uniquePeople.size}</div>`, iconSize:[30,30], iconAnchor:[15,15]});
+      const m = L.marker([first.lat, first.lon], {icon}).addTo(bubbleLayer); m.bindPopup(popupHtmlForArea(rows)); m.bindTooltip(tooltipHtmlForArea(rows), {direction:'top', sticky:true, className:'node-tooltip'});
+    } else {
+      const pid = first.pid; const color = colorForPerson(pid); const pale = isBroad(first);
+      const marker = L.circleMarker([first.lat, first.lon], {radius: pid===state.homeId?7:5.5, color:'#000', fillColor: color, fillOpacity: pale ? 0.22 : 0.72, opacity: 0.95, weight: 1.25});
+      marker.addTo(eventLayer).bindPopup(`<div><strong>${esc(first.name)}</strong></div><div>${esc(first.type)} &middot; ${esc(first.date || (first.y0===first.y1 ? first.y0 : `${first.y0 ?? '?'}–${first.y1 ?? '?'}`))}</div><div>${esc(first.placeOrig || first.placeStd || 'Unknown place')}</div><div class="note">${esc(first.note || '')}</div>`).bindTooltip(tooltipHtmlForEvent(first), {direction:'top', sticky:true, className:'node-tooltip'});
+      marker.on('click', ()=>{ setSelectedPerson(pid, {pan:false, redraw:true, activateLines:true}); });
+      currentMarkerRefs.set(pid, marker);
+    }
+  }
+
+  if (fitToData && visibleEvents.length) { map.fitBounds(L.latLngBounds(visibleEvents.map(ev=>[ev.lat, ev.lon])).pad(0.18), {maxZoom: 8}); }
+  if (heavyViewportMode) { document.getElementById('detailHint').setAttribute('data-rendered', `${renderEvents.length}/${visibleEvents.length}`); } else { document.getElementById('detailHint').removeAttribute('data-rendered'); }
+  if (!state.selectedPersonId) state.selectedPersonId = state.homeId;
+  if (state.focusedPersonId) showDetails(state.focusedPersonId);
+  setStatus('Status: Ready');
+}
+
+function wireCollapseButtons() {
+  const btns = [document.getElementById('collapseDetailBtn'), document.getElementById('collapseDetailBtnInner')].filter(Boolean);
+  btns.forEach(btn => btn.onclick = () => { const fd = document.getElementById('floatingDetail'); fd.classList.toggle('collapsed'); const collapsed = fd.classList.contains('collapsed'); document.querySelectorAll('#collapseDetailBtn, #collapseDetailBtnInner').forEach(b => { if (b) b.textContent = collapsed ? '+' : '−'; }); });
+}
+function setHomeFromInput() { const val = document.getElementById('homeInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.homeId = id; state.focusedPersonId = id; state.selectedPersonId = id; state.lineFocusId = state.mode === 'full' ? null : id; state.selectedBranches = new Set(); state.initializedDates = false; state.branchUiSig = null; state.branchRenderKey = null; scheduleRender(true); }
+function focusPerson() { const val = document.getElementById('focusInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.lineFocusId = id; setSelectedPerson(id, {pan:false, redraw:true, activateLines:true}); const ev = bestEventForPerson(id, true) || bestEventForPerson(id, false); if (ev) map.setView([ev.lat, ev.lon], Math.max(map.getZoom(), 8)); }
+
+let renderQueued = false, pendingFitToData = false, renderTimer = null;
+function scheduleRender(fitToData, debounceMs = 0) {
+  pendingFitToData = pendingFitToData || !!fitToData;
+  if (renderTimer) clearTimeout(renderTimer);
+  const fire = () => {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(() => {
+      const fit = pendingFitToData;
+      renderQueued = false;
+      pendingFitToData = false;
+      render(fit);
+    });
+  };
+  if (debounceMs > 0) { renderTimer = setTimeout(fire, debounceMs); } else { fire(); }
+}
+
+buildPeopleList(); wireCollapseButtons();
+document.getElementById('setHomeBtn').addEventListener('click', setHomeFromInput);
+document.getElementById('focusBtn').addEventListener('click', focusPerson);
+document.getElementById('placeSearchBtn').addEventListener('click', runPlaceSearch);
+document.getElementById('placeSearchInput').addEventListener('keydown', e=>{ if (e.key === 'Enter') { e.preventDefault(); runPlaceSearch(); } });
+document.getElementById('placeSearchInput').addEventListener('input', ()=>{ const q = (placeSearchInput.value || '').trim(); if (!q) { placeSearchResults.innerHTML=''; placeSearchResults.classList.remove('active'); } });
+map.on('moveend zoomend', () => scheduleRender(false, 40));
+document.getElementById('branchSearch').addEventListener('input', ()=>{ state.branchUiSig = null; state.branchRenderKey = null; refreshBranchList(state.currentScope || computeScopeCached(state.homeId), getCurrentControls()); });
+document.getElementById('allBranchesBtn').addEventListener('click', ()=>{ state.selectedBranches = new Set([...scopeBranches(state.currentScope || computeScopeCached(state.homeId))]); state.branchUiSig = null; state.branchRenderKey = null; scheduleRender(false); });
+document.getElementById('clearBranchesBtn').addEventListener('click', ()=>{ state.selectedBranches = new Set(); state.branchUiSig = null; state.branchRenderKey = null; scheduleRender(false); });
+document.getElementById('modeSelect').addEventListener('change', e=>{ state.mode = e.target.value; state.selectedBranches = new Set(); state.initializedDates = false; state.branchUiSig = null; state.branchRenderKey = null; state.lineFocusId = state.mode === 'full' ? null : (state.selectedPersonId || state.homeId); scheduleRender(true); });
+['showDirect','showSiblings','showSpouses','showPaths','showConnectors','showAreaBubbles','hideBroadOnly'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>scheduleRender(false)));
+['genDepth','dateMin','dateMax'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>scheduleRender(false, 75)));
+document.querySelectorAll('input[name="side"]').forEach(el=>el.addEventListener('change', ()=>{ state.branchUiSig = null; state.branchRenderKey = null; scheduleRender(false); }));
+document.getElementById('genDepth').addEventListener('input', ()=>{ document.getElementById('genVal').textContent = document.getElementById('genDepth').value; });
+document.getElementById('dateMin').addEventListener('input', ()=>{ if (Number(dateMin.value) > Number(dateMax.value)) dateMin.value = dateMax.value; document.getElementById('dateMinVal').textContent = dateMin.value; scheduleRender(false, 75); });
+document.getElementById('dateMax').addEventListener('input', ()=>{ if (Number(dateMax.value) < Number(dateMin.value)) dateMax.value = dateMin.value; document.getElementById('dateMaxVal').textContent = dateMax.value; scheduleRender(false, 75); });
+
+setStatus('Status: Building map…', true);
+map.whenReady(() => {
+  map.invalidateSize();
+  scheduleRender(true);
+  setTimeout(() => { map.invalidateSize(); scheduleRender(false); }, 180);
+  setTimeout(() => { map.invalidateSize(); scheduleRender(false); }, 650);
+});
+</script>
+</body>
+</html>
