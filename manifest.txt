@@ -1,1 +1,6 @@
-index.html = v18.1 patched build with globe favicon, France centroid fixes, and zoom-aware bubble aggregation
+Family Distribution History v18.2
+Data split by century chunks: 17
+Includes France approximate-center coordinate cleanup (429 records corrected)
+Historical scope tightened to exclude siblings/spouses of the home person from the ancestor-only view
+Immediate filter redraw fix applied
+Zoom-aware area-bubble aggregation applied
