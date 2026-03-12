@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Family Distribution History v17.1</title>
+<title>Family Distribution History v17.2</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="theme-color" content="#1d4ed8"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -70,6 +70,11 @@ hr{border:none;border-top:1px solid #ddd;margin:10px 0;}
 #mobileCloseBtn{padding:6px 10px;border:1px solid #c7ccd7;border-radius:999px;background:#fff;font-weight:700;}
 #mobileScrim{display:none;position:absolute;inset:0;background:rgba(16,24,40,0.38);z-index:1090;}
 body.mobile-sidebar-open{overflow:hidden;}
+#loadingOverlay{position:absolute;inset:0;z-index:1300;display:flex;align-items:center;justify-content:center;background:rgba(247,249,252,0.86);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .16s ease;}
+#loadingOverlay.show{opacity:1;pointer-events:auto;}
+#loadingCard{min-width:min(82vw,320px);max-width:min(92vw,420px);padding:16px 18px;border-radius:14px;background:rgba(255,255,255,0.98);border:1px solid #bfd3f4;border-left:4px solid var(--fin-blue);box-shadow:0 10px 28px rgba(0,0,0,0.16);color:#17315d;}
+#loadingTitle{font-weight:700;margin-bottom:6px;}
+#loadingMsg{font-size:13px;line-height:1.35;color:#35527f;}
 @media (max-width: 900px){
   #app{display:block;height:100%;}
   #map{height:100%;min-height:100vh;}
@@ -106,9 +111,10 @@ body.mobile-sidebar-open{overflow:hidden;}
 <body>
 <div id="app">
 <div id="mobileScrim" class="mobile-only"></div>
+<div id="loadingOverlay" class="show" aria-live="polite"><div id="loadingCard"><div id="loadingTitle">Loading family data…</div><div id="loadingMsg">Building the map and family indexes.</div></div></div>
 <div id="sidebar">
 <div class="sidebar-mobile-head mobile-only"><div class="sidebar-mobile-title">Map controls</div><button id="mobileCloseBtn" type="button" aria-label="Close controls">✕</button></div>
-<div class="title-row"><h1>Family Distribution History <span class="version-pill">v17.1</span></h1><button id="mobileControlsBtn" class="mobile-only" type="button" aria-label="Open controls">☰ Controls</button></div>
+<div class="title-row"><h1>Family Distribution History <span class="version-pill">v17.2</span></h1><button id="mobileControlsBtn" class="mobile-only" type="button" aria-label="Open controls">☰ Controls</button></div>
 <div class="small">Default home person is Tod Poirier. Historical mode shows direct ancestors, siblings of those ancestors, and spouses in the same scope. Modern mode shows the broader modern family (1850+) from the GEDCOM. Full GEDCOM shows everyone in the tree.</div>
 
 <div class="control">
@@ -236,7 +242,7 @@ function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
 function eventInRange(ev, yMin, yMax) { if (ev.y1 != null && ev.y1 < yMin) return false; if (ev.y0 != null && ev.y0 > yMax) return false; if (ev.y0 != null || ev.y1 != null) return true; const p = peopleById.get(ev.pid) || {}; if (p.maxYear != null && p.maxYear < yMin) return false; if (p.minYear != null && p.minYear > yMax) return false; return p.minYear != null || p.maxYear != null; }
 function lifeYears(pid) { const p = peopleById.get(pid) || {}; const a = p.minYear ?? '?'; const b = p.maxYear ?? '?'; return `(${a}–${b})`; }
 
-const state = { mode: 'historical', homeId: DEFAULT_HOME_ID, selectedBranches: new Set(), focusedPersonId: DEFAULT_HOME_ID, currentScope: null, initializedDates: false, selectedPersonId: null, detailCollapsed: false };
+const state = { mode: 'historical', homeId: DEFAULT_HOME_ID, selectedBranches: new Set(), focusedPersonId: DEFAULT_HOME_ID, currentScope: null, initializedDates: false, initializedGen: false, genScopeKey: '', selectedPersonId: null, detailCollapsed: false };
 
 function buildPeopleList() {
   const dl = document.getElementById('peopleList'); dl.innerHTML = '';
@@ -346,17 +352,18 @@ function computeHistoricalScope(homeId) {
 }
 
 function computeGedcomScope(homeId) {
+  const anc = computeAncestorScope(homeId);
   const included = new Set();
   const gen = new Map([[homeId, 1]]);
   const rel = new Map([[homeId, 'home']]);
   const side = new Map([[homeId, new Set(['home'])]]);
   for (const p of PEOPLE) {
     included.add(p.id);
-    if (!gen.has(p.id)) gen.set(p.id, p.id === homeId ? 1 : 1);
+    if (!gen.has(p.id)) gen.set(p.id, anc.gen.get(p.id) || 1);
     if (!rel.has(p.id)) rel.set(p.id, p.id === homeId ? 'home' : 'other');
-    if (!side.has(p.id)) side.set(p.id, new Set());
+    if (!side.has(p.id)) side.set(p.id, new Set(anc.side.get(p.id) || []));
   }
-  return {included, gen, rel, side, genMax: 1};
+  return {included, gen, rel, side, genMax: Math.max(anc.genMax || 1, 1)};
 }
 
 function computeModernScope(homeId) {
@@ -619,6 +626,23 @@ const map = L.map('map', { preferCanvas: true, zoomSnap: 0.25 }).setView([46.5, 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
 const eventLayer = L.layerGroup().addTo(map), pathLayer = L.layerGroup().addTo(map), connectorLayer = L.layerGroup().addTo(map), bubbleLayer = L.layerGroup().addTo(map);
 let currentMarkerRefs = new Map();
+let loadingHideTimer = null;
+function showLoading(message = 'Working on the map…', title = 'Loading family data…') {
+  const overlay = document.getElementById('loadingOverlay');
+  if (!overlay) return;
+  const titleEl = document.getElementById('loadingTitle');
+  const msgEl = document.getElementById('loadingMsg');
+  if (titleEl) titleEl.textContent = title;
+  if (msgEl) msgEl.textContent = message;
+  if (loadingHideTimer) { clearTimeout(loadingHideTimer); loadingHideTimer = null; }
+  overlay.classList.add('show');
+}
+function hideLoading(delayMs = 120) {
+  const overlay = document.getElementById('loadingOverlay');
+  if (!overlay) return;
+  if (loadingHideTimer) clearTimeout(loadingHideTimer);
+  loadingHideTimer = setTimeout(() => overlay.classList.remove('show'), delayMs);
+}
 
 function addArrowHead(from, to, color, opacity = 0.7, weight = 2) {
   if (!from || !to) return;
@@ -658,9 +682,19 @@ function drawArrowedConnector(from, to, opts = {}) {
 function render(fitToData) {
   state.currentScope = computeScopeCached(state.homeId); const scope = state.currentScope;
   if (!state.selectedBranches.size) { for (const pid of scope.included) { const p = peopleById.get(pid); if (p?.branch) state.selectedBranches.add(p.branch); } }
+  const genScopeKey = `${state.mode}|${state.homeId}|${scope.genMax}`;
+  const genDepthEl = document.getElementById('genDepth');
+  genDepthEl.max = scope.genMax;
+  if (!state.initializedGen || state.genScopeKey !== genScopeKey) {
+    genDepthEl.value = scope.genMax;
+    state.initializedGen = true;
+    state.genScopeKey = genScopeKey;
+  } else if (Number(genDepthEl.value) > scope.genMax) {
+    genDepthEl.value = scope.genMax;
+  }
+  document.getElementById('genVal').textContent = genDepthEl.value; document.getElementById('genMaxVal').textContent = scope.genMax;
   const ctl = getCurrentControls();
   refreshBranchList(scope, ctl);
-  document.getElementById('genDepth').max = scope.genMax; if (Number(document.getElementById('genDepth').value) > scope.genMax) document.getElementById('genDepth').value = scope.genMax; document.getElementById('genVal').textContent = document.getElementById('genDepth').value; document.getElementById('genMaxVal').textContent = scope.genMax;
   const scopeEventsObj = getScopeEvents(scope);
   const scopeEvents = scopeEventsObj.rows;
   const minAll = scopeEventsObj.minYear; const maxAll = scopeEventsObj.maxYear;
@@ -673,10 +707,24 @@ function render(fitToData) {
 
   const renderBounds = map.getBounds().pad(0.18);
   const forceIds = new Set([state.homeId, state.selectedPersonId, state.focusedPersonId].filter(Boolean));
-  const heavyViewportMode = visibleEvents.length > 2200;
-  const renderEvents = heavyViewportMode
+  const heavyViewportMode = visibleEvents.length > 1200;
+  let renderEvents = heavyViewportMode
     ? visibleEvents.filter(ev => forceIds.has(ev.pid) || renderBounds.contains([ev.lat, ev.lon]))
     : visibleEvents;
+
+  if (heavyViewportMode) {
+    const reduced = [];
+    const bestByPerson = new Map();
+    for (const ev of renderEvents) {
+      if (forceIds.has(ev.pid)) { reduced.push(ev); continue; }
+      const cur = bestByPerson.get(ev.pid);
+      if (!cur) { bestByPerson.set(ev.pid, ev); continue; }
+      const scEv = eventSpecificityScore(ev), scCur = eventSpecificityScore(cur);
+      const midEv = eventMid(ev), midCur = eventMid(cur);
+      if (scEv < scCur || (scEv === scCur && (midEv ?? 99999) < (midCur ?? 99999))) bestByPerson.set(ev.pid, ev);
+    }
+    renderEvents = reduced.concat([...bestByPerson.values()]);
+  }
 
   const areaMap = new Map();
   const firstVisibleEventByPerson = new Map();
@@ -738,9 +786,16 @@ function render(fitToData) {
     }
   }
 
-  if (fitToData && visibleEvents.length) { map.fitBounds(L.latLngBounds(visibleEvents.map(ev=>[ev.lat, ev.lon])).pad(0.18), {maxZoom: 8}); }
-  if (heavyViewportMode) { document.getElementById('detailHint').setAttribute('data-rendered', `${renderEvents.length}/${visibleEvents.length}`); } else { document.getElementById('detailHint').removeAttribute('data-rendered'); }
+  if (fitToData && visibleEvents.length) { map.fitBounds(L.latLngBounds(visibleEvents.map(ev=>[ev.lat, ev.lon])).pad(0.18), {maxZoom: 8, animate: false}); }
+  if (heavyViewportMode) {
+    document.getElementById('detailHint').setAttribute('data-rendered', `${renderEvents.length}/${visibleEvents.length}`);
+    document.querySelector('#detailHint .small').textContent = `Area bubbles and broad-location points are always shown. Life paths and family connectors appear only for the selected person. Heavy views are simplified to keep the map responsive (${renderEvents.length.toLocaleString()} representative points from ${visibleEvents.length.toLocaleString()} visible events).`;
+  } else {
+    document.getElementById('detailHint').removeAttribute('data-rendered');
+    document.querySelector('#detailHint .small').textContent = 'Area bubbles and broad-location points are always shown. Life paths and family connectors appear only for the selected person.';
+  }
   if (state.focusedPersonId) showDetails(state.focusedPersonId);
+  hideLoading(140);
 }
 
 function wireCollapseButtons() {
@@ -758,8 +813,8 @@ function wireCollapseButtons() {
     });
   });
 }
-function setHomeFromInput() { const val = document.getElementById('homeInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.homeId = id; state.focusedPersonId = id; state.selectedPersonId = id; state.selectedBranches = new Set(); state.initializedDates = false; state.branchUiSig = null; render(true); }
-function focusPerson() { const val = document.getElementById('focusInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.focusedPersonId = id; state.selectedPersonId = id; showDetails(id); render(false); const ev = bestEventForPerson(id, true) || bestEventForPerson(id, false); if (ev) map.setView([ev.lat, ev.lon], Math.max(map.getZoom(), 8)); }
+function setHomeFromInput() { const val = document.getElementById('homeInput').value.trim(); const id = peopleByName.get(val); if (!id) return; showLoading('Re-centering the map for the new home person.', 'Updating map…'); state.homeId = id; state.focusedPersonId = id; state.selectedPersonId = id; state.selectedBranches = new Set(); state.initializedDates = false; state.initializedGen = false; state.branchUiSig = null; render(true); }
+function focusPerson() { const val = document.getElementById('focusInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.focusedPersonId = id; state.selectedPersonId = id; showDetails(id); render(false); const ev = bestEventForPerson(id, true) || bestEventForPerson(id, false); if (ev) map.setView([ev.lat, ev.lon], Math.max(map.getZoom(), 8), {animate:false}); }
 
 let renderQueued = false, pendingFitToData = false, renderTimer = null;
 function scheduleRender(fitToData, debounceMs = 0) {
@@ -784,7 +839,7 @@ document.getElementById('focusBtn').addEventListener('click', focusPerson);
 document.getElementById('branchSearch').addEventListener('input', ()=>{ state.branchUiSig = null; refreshBranchList(state.currentScope || computeScopeCached(state.homeId), getCurrentControls()); });
 document.getElementById('allBranchesBtn').addEventListener('click', ()=>{ state.selectedBranches = new Set([...scopeBranches(state.currentScope || computeScopeCached(state.homeId))]); state.branchUiSig = null; scheduleRender(false); });
 document.getElementById('clearBranchesBtn').addEventListener('click', ()=>{ state.selectedBranches = new Set(); state.branchUiSig = null; scheduleRender(false); });
-document.getElementById('modeSelect').addEventListener('change', e=>{ state.mode = e.target.value; state.selectedBranches = new Set(); state.initializedDates = false; state.branchUiSig = null; scheduleRender(true); });
+document.getElementById('modeSelect').addEventListener('change', e=>{ showLoading('Switching map data and rebuilding visible points.', 'Updating map…'); state.mode = e.target.value; state.selectedBranches = new Set(); state.initializedDates = false; state.initializedGen = false; state.branchUiSig = null; scheduleRender(true); });
 ['showDirect','showSiblings','showSpouses'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>scheduleRender(false)));
 ['genDepth','dateMin','dateMax'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>scheduleRender(false, 75)));
 document.querySelectorAll('input[name="side"]').forEach(el=>el.addEventListener('change', ()=>{ state.branchUiSig = null; scheduleRender(false); }));
@@ -792,8 +847,9 @@ document.getElementById('genDepth').addEventListener('input', ()=>{ document.get
 document.getElementById('dateMin').addEventListener('input', ()=>{ if (Number(dateMin.value) > Number(dateMax.value)) dateMin.value = dateMax.value; document.getElementById('dateMinVal').textContent = dateMin.value; scheduleRender(false, 75); });
 document.getElementById('dateMax').addEventListener('input', ()=>{ if (Number(dateMax.value) < Number(dateMin.value)) dateMax.value = dateMin.value; document.getElementById('dateMaxVal').textContent = dateMax.value; scheduleRender(false, 75); });
 
-map.on('moveend zoomend', ()=>scheduleRender(false, 40));
-render(true);
+map.on('moveend zoomend', ()=>scheduleRender(false, 70));
+showLoading('Building the first map view. Large GEDCOM views may take a moment.', 'Loading family data…');
+setTimeout(() => render(true), 0);
 
 const mobileControlsBtn = document.getElementById('mobileControlsBtn');
 const mobileCloseBtn = document.getElementById('mobileCloseBtn');
