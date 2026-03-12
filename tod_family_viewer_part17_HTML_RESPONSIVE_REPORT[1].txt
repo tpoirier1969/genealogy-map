@@ -1,6 +1,0 @@
-HTML-only pass part 17
-- Added version badge v17.0 to title
-- Added mobile responsive drawer controls
-- Added portrait/landscape responsive layout rules
-- Added mobile web app meta tags and touch icon
-- Reused data file from part 15 unchanged
