@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Tod family map v17.0</title>
+<title>Family Distribution History v17.4</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="theme-color" content="#1d4ed8"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -44,6 +44,15 @@ button{padding:7px 10px;cursor:pointer;}
 .leaflet-popup-content{max-height:340px;overflow:auto;}
 .area-bubble{background:rgba(11,87,208,0.5);color:#fff;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:1px solid #000;}
 hr{border:none;border-top:1px solid #ddd;margin:10px 0;}
+#loadingOverlay{position:absolute;inset:0;z-index:1400;display:flex;align-items:center;justify-content:center;background:rgba(248,250,252,0.88);backdrop-filter:blur(4px);transition:opacity 0.2s ease, visibility 0.2s ease;}
+#loadingOverlay.hidden{opacity:0;visibility:hidden;pointer-events:none;}
+#loadingOverlay .loading-card{max-width:min(90vw,420px);padding:18px 20px;border:1px solid #b9c8e4;border-left:5px solid var(--fin-blue,#1d4ed8);border-radius:14px;background:rgba(255,255,255,0.97);box-shadow:0 12px 32px rgba(0,0,0,0.18);}
+#loadingOverlay .loading-title{font-size:18px;font-weight:700;color:#0b2f63;margin:0 0 8px 0;}
+#loadingOverlay .loading-text{font-size:13px;line-height:1.45;color:#334155;}
+#loadingOverlay .loading-meta{margin-top:10px;font-size:11px;color:#64748b;}
+#loadingOverlay .loading-dismiss{margin-top:12px;padding:7px 10px;border:1px solid #c7d2e5;border-radius:999px;background:#fff;font-weight:600;cursor:pointer;display:none;}
+#loadingOverlay.show-dismiss .loading-dismiss{display:inline-flex;}
+
 #floatingDetail{position:absolute;right:16px;top:16px;z-index:1000;width:370px;max-height:calc(100% - 32px);overflow:auto;padding:12px 14px;box-sizing:border-box;background:rgba(255,255,255,0.97);border:1px solid #cfcfd4;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.16);backdrop-filter:blur(3px);transition:width 0.15s ease,padding 0.15s ease;}
 #floatingDetail.collapsed{width:38px;padding:10px 6px;overflow:hidden;}
 #floatingDetail.collapsed .detail-body{display:none;}
@@ -116,14 +125,15 @@ body.mobile-sidebar-open{overflow:hidden;}
 <button id="mobileMenuFab" class="mobile-only" type="button" aria-label="Open map menu" aria-expanded="false">☰ Menu</button>
 <div id="sidebar">
 <div class="sidebar-mobile-head mobile-only"><div class="sidebar-mobile-title">Map controls</div><button id="mobileCloseBtn" type="button" aria-label="Close controls">✕</button></div>
-<div class="title-row"><h1>Family Distribution History <span class="version-pill">v17.3</span></h1><button id="mobileControlsBtn" class="mobile-only" type="button" aria-label="Open controls">☰ Controls</button></div>
-<div class="small">Default home person is Tod Poirier. Historical mode shows direct ancestors, siblings of those ancestors, and spouses in the same scope. Modern mode shows the broader modern family (1850+) from the GEDCOM. On phones, the controls live in the Menu button so the map gets more breathing room.</div>
+<div class="title-row"><h1>Family Distribution History <span class="version-pill">v17.4</span></h1><button id="mobileControlsBtn" class="mobile-only" type="button" aria-label="Open controls">☰ Controls</button></div>
+<div class="small">Default home person is Tod Poirier. Historical mode shows direct ancestors, siblings of those ancestors, and spouses in the same scope. Full modern family shows the broader modern family (1850+). Full family GEDCOM shows the entire tree. On phones, the controls live in the Menu button so the map gets more breathing room.</div>
 
 <div class="control">
 <label for="modeSelect">Map data</label>
 <select id="modeSelect">
 <option value="historical" selected>Historical information</option>
 <option value="modern">Full modern family (1850+)</option>
+<option value="gedcom">Full family GEDCOM</option>
 </select>
 </div>
 
@@ -190,16 +200,11 @@ body.mobile-sidebar-open{overflow:hidden;}
 </div>
 
 <div class="control">
-<label>Map layers</label>
-<div class="check-row">
-<label><input id="showPaths" type="checkbox"/> All life paths</label>
-<label><input id="showConnectors" type="checkbox" checked/> Parent-child</label>
-<label><input id="showAreaBubbles" type="checkbox" checked/> Area bubbles</label>
-<label><input id="hideBroadOnly" type="checkbox"/> Hide broad-only points</label>
-</div>
+<label>Map display</label>
+<div class="small">Area bubbles and broad-only points always stay visible. Lines appear only for the selected person.</div>
 </div>
 
-<div id="summary"></div><div class="small" style="margin-top:8px;color:#5b6472;">By default the map shows only the selected person\u2019s movement path. Turn on <em>All life paths</em> if you want the full spaghetti bowl.</div>
+<div id="summary"></div><div class="small" style="margin-top:8px;color:#5b6472;">The map stays calmer now: no selected person, no lines.</div>
 <div id="detailHint"><div class="small">Selected person details appear in the floating panel on the right.</div></div>
 </div>
 <div id="map"></div>
@@ -210,6 +215,14 @@ body.mobile-sidebar-open{overflow:hidden;}
     <button id="collapseDetailBtn" class="collapse-btn" title="Collapse">−</button>
   </div>
   <div class="detail-body"><div class="small">Click a person, event, or crowded location bubble to see details here.</div></div>
+</div>
+<div id="loadingOverlay" aria-live="polite">
+  <div class="loading-card">
+    <div class="loading-title">Loading family data…</div>
+    <div class="loading-text" id="loadingText">Getting the tree and map ready.</div>
+    <div class="loading-meta" id="loadingMeta">Large views can take a moment on slower devices.</div>
+    <button id="loadingDismissBtn" class="loading-dismiss" type="button">Hide this message</button>
+  </div>
 </div>
 </div>
 
@@ -253,7 +266,48 @@ function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
 function eventInRange(ev, yMin, yMax) { if (ev.y1 != null && ev.y1 < yMin) return false; if (ev.y0 != null && ev.y0 > yMax) return false; if (ev.y0 != null || ev.y1 != null) return true; const p = peopleById.get(ev.pid) || {}; if (p.maxYear != null && p.maxYear < yMin) return false; if (p.minYear != null && p.minYear > yMax) return false; return p.minYear != null || p.maxYear != null; }
 function lifeYears(pid) { const p = peopleById.get(pid) || {}; const a = p.minYear ?? '?'; const b = p.maxYear ?? '?'; return `(${a}–${b})`; }
 
-const state = { mode: 'historical', homeId: DEFAULT_HOME_ID, selectedBranches: new Set(), focusedPersonId: DEFAULT_HOME_ID, currentScope: null, initializedDates: false, selectedPersonId: DEFAULT_HOME_ID };
+const state = { mode: 'historical', homeId: DEFAULT_HOME_ID, selectedBranches: new Set(), focusedPersonId: DEFAULT_HOME_ID, currentScope: null, initializedDates: false, selectedPersonId: DEFAULT_HOME_ID, lastScopeSig: null, loadingVisible: true };
+const loadingOverlay = document.getElementById('loadingOverlay');
+const loadingText = document.getElementById('loadingText');
+const loadingMeta = document.getElementById('loadingMeta');
+const loadingDismissBtn = document.getElementById('loadingDismissBtn');
+let loadingTimeout = null;
+let loadingDismissTimeout = null;
+function showLoading(message = 'Getting the tree and map ready.', meta = 'Large views can take a moment on slower devices.') {
+  if (!loadingOverlay) return;
+  if (loadingText) loadingText.textContent = message;
+  if (loadingMeta) loadingMeta.textContent = meta;
+  loadingOverlay.classList.remove('hidden');
+  loadingOverlay.classList.remove('show-dismiss');
+  state.loadingVisible = true;
+  if (loadingTimeout) clearTimeout(loadingTimeout);
+  if (loadingDismissTimeout) clearTimeout(loadingDismissTimeout);
+  loadingDismissTimeout = setTimeout(() => loadingOverlay.classList.add('show-dismiss'), 5000);
+  loadingTimeout = setTimeout(() => {
+    if (loadingMeta) loadingMeta.textContent = 'Still working. This view is heavy, so the map is simplifying what it draws to stay responsive.';
+    loadingOverlay.classList.add('show-dismiss');
+  }, 9000);
+}
+function hideLoading() {
+  if (!loadingOverlay) return;
+  if (loadingTimeout) clearTimeout(loadingTimeout);
+  if (loadingDismissTimeout) clearTimeout(loadingDismissTimeout);
+  loadingOverlay.classList.add('hidden');
+  loadingOverlay.classList.remove('show-dismiss');
+  state.loadingVisible = false;
+}
+if (loadingDismissBtn) loadingDismissBtn.addEventListener('click', hideLoading);
+window.addEventListener('error', (e) => {
+  console.error(e.error || e.message || e);
+  showLoading('Something tripped while building the map.', 'The loading message was left up on purpose so the error would not be invisible. You can hide it with the button below.');
+  if (loadingOverlay) loadingOverlay.classList.add('show-dismiss');
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error(e.reason || e);
+  showLoading('Something tripped while building the map.', 'A script promise failed. You can hide this message and reload after uploading the updated file.');
+  if (loadingOverlay) loadingOverlay.classList.add('show-dismiss');
+});
+
 
 function buildPeopleList() {
   const dl = document.getElementById('peopleList'); dl.innerHTML = '';
@@ -419,8 +473,25 @@ function computeModernScope(homeId) {
   return {included, gen, rel, side, genMax};
 }
 
+function computeGedcomScope(homeId) {
+  const included = new Set();
+  const gen = new Map();
+  const rel = new Map();
+  const side = new Map();
+  for (const p of PEOPLE) {
+    included.add(p.id);
+    rel.set(p.id, p.id === homeId ? 'home' : 'other');
+    gen.set(p.id, 63);
+    side.set(p.id, new Set(p.id === homeId ? ['home'] : []));
+  }
+  gen.set(homeId, 1);
+  return { included, gen, rel, side, genMax: 63 };
+}
+
 function computeScope(homeId) {
-  return state.mode === 'modern' ? computeModernScope(homeId) : computeHistoricalScope(homeId);
+  if (state.mode === 'modern') return computeModernScope(homeId);
+  if (state.mode === 'gedcom') return computeGedcomScope(homeId);
+  return computeHistoricalScope(homeId);
 }
 function computeScopeCached(homeId) {
   const key = `${state.mode}|${homeId}`;
@@ -440,7 +511,7 @@ function getScopeEvents(scope) {
 }
 
 function getCurrentControls() {
-  return { side: document.querySelector('input[name="side"]:checked')?.value || 'all', showDirect: document.getElementById('showDirect').checked, showSiblings: document.getElementById('showSiblings').checked, showSpouses: document.getElementById('showSpouses').checked, genDepth: Number(document.getElementById('genDepth').value), yMin: Number(document.getElementById('dateMin').value), yMax: Number(document.getElementById('dateMax').value), hideBroadOnly: document.getElementById('hideBroadOnly').checked };
+  return { side: document.querySelector('input[name="side"]:checked')?.value || 'all', showDirect: document.getElementById('showDirect').checked, showSiblings: document.getElementById('showSiblings').checked, showSpouses: document.getElementById('showSpouses').checked, genDepth: Number(document.getElementById('genDepth').value), yMin: Number(document.getElementById('dateMin').value), yMax: Number(document.getElementById('dateMax').value) };
 }
 
 
@@ -555,7 +626,7 @@ function visiblePeopleAndEvents(scope, ctl, scopeEvents) {
     visiblePeople.add(pid);
   }
   for (const ev of scopeEvents) {
-    if (!visiblePeople.has(ev.pid)) continue; if (ctl.hideBroadOnly && isBroad(ev)) continue; if (!eventInRange(ev, ctl.yMin, ctl.yMax)) continue; visibleEvents.push(ev);
+    if (!visiblePeople.has(ev.pid)) continue; if (!eventInRange(ev, ctl.yMin, ctl.yMax)) continue; visibleEvents.push(ev);
   }
   return {visiblePeople, visibleEvents};
 }
@@ -563,7 +634,8 @@ function visiblePeopleAndEvents(scope, ctl, scopeEvents) {
 function renderSummary(visiblePeople, visibleEvents) {
   const scope = state.currentScope; let direct=0,siblings=0,spouses=0,other=0;
   for (const pid of visiblePeople) { const rel = scope.rel.get(pid) || 'other'; if (rel==='direct') direct++; else if (rel==='sibling') siblings++; else if (rel==='spouse') spouses++; else other++; }
-  document.getElementById('summary').innerHTML = `<strong>Visible now</strong><br/>${visiblePeople.size.toLocaleString()} people &middot; ${visibleEvents.length.toLocaleString()} mapped events<br/>Direct: ${direct.toLocaleString()} &middot; Siblings: ${siblings.toLocaleString()} &middot; Spouses: ${spouses.toLocaleString()}${state.mode === 'modern' ? ` &middot; Other modern: ${other.toLocaleString()}` : ''}<br/>Mode: ${esc(state.mode)} &middot; Home: ${esc(peopleById.get(state.homeId)?.name || '')}`;
+  const modeLabel = state.mode === 'historical' ? 'Historical information' : (state.mode === 'modern' ? 'Full modern family' : 'Full family GEDCOM');
+  document.getElementById('summary').innerHTML = `<strong>Visible now</strong><br/>${visiblePeople.size.toLocaleString()} people &middot; ${visibleEvents.length.toLocaleString()} mapped events<br/>Direct: ${direct.toLocaleString()} &middot; Siblings: ${siblings.toLocaleString()} &middot; Spouses: ${spouses.toLocaleString()}${state.mode !== 'historical' ? ` &middot; Other in scope: ${other.toLocaleString()}` : ''}<br/>Mode: ${esc(modeLabel)} &middot; Home: ${esc(peopleById.get(state.homeId)?.name || '')}`;
 }
 
 function sortedIds(ids) { return [...new Set(ids || [])].filter(id => peopleById.has(id)).sort((a,b)=>(peopleById.get(a).name||'').localeCompare(peopleById.get(b).name||'')); }
@@ -571,11 +643,11 @@ function listHtml(label, ids) { const rows = sortedIds(ids); return `<div class=
 
 function showDetails(pid) {
   const p = peopleById.get(pid); if (!p) return; const ctl = getCurrentControls();
-  const evs = (eventsByPerson.get(pid) || []).filter(ev => ev.lat != null && ev.lon != null && (!ctl.hideBroadOnly || !isBroad(ev)) && eventInRange(ev, ctl.yMin, ctl.yMax));
+  const evs = (eventsByPerson.get(pid) || []).filter(ev => ev.lat != null && ev.lon != null && eventInRange(ev, ctl.yMin, ctl.yMax));
   evs.sort((a,b)=>(eventMid(a) ?? 99999) - (eventMid(b) ?? 99999));
   const scope = state.currentScope; const rel = scope.rel.get(pid) || 'other'; const sideSet = [...(scope.side.get(pid) || [])].filter(x=>x!=='home'); const side = sideSet.join(', ') || (pid===state.homeId ? 'home' : '—');
   const relationLabel = relationText(pid);
-  const htmlEvents = evs.map(ev => `<div class="detail-event"><div><span class="pill">${esc(ev.type)}</span> <strong>${esc(ev.date || (ev.y0===ev.y1 ? ev.y0 : `${ev.y0 ?? '?'}–${ev.y1 ?? '?'}`))}</strong></div><div>${esc(ev.placeOrig || ev.placeStd || 'Unknown place')}</div><div class="note">${esc(ev.note || '')}</div></div>`).join('');
+  const htmlEvents = evs.map(ev => `<div class="detail-event"><div><span class="pill">${esc(ev.type)}</span> <strong style="font-size:12px;">${esc(ev.date || (ev.y0===ev.y1 ? ev.y0 : `${ev.y0 ?? '?'}–${ev.y1 ?? '?'}`))}</strong></div><div><strong style="font-size:11px;">${esc(ev.placeOrig || ev.placeStd || 'Unknown place')}</strong></div><div class="note">${esc(ev.note || '')}</div></div>`).join('');
   const siblings = [...(siblingsByPerson.get(pid) || [])];
   const html = `<div class="panel-head"><div class="panel-title">Selected person</div><button id="collapseDetailBtnInner" class="collapse-btn" title="Collapse">−</button></div><div class="detail-body"><div><strong>${esc(p.name)}</strong></div><div class="small">${esc(p.branch)} &middot; ${esc(relationLabel)} &middot; ${esc(side)}</div><div class="small">${esc(p.birthDate || '')} ${p.birthPlace ? '— ' + esc(p.birthPlace) : ''}</div><div class="small">${esc(p.deathDate || '')} ${p.deathPlace ? '— ' + esc(p.deathPlace) : ''}</div><hr/><div><strong>Visible events</strong></div>${htmlEvents || '<div class="small">No visible events in the current filters.</div>'}${listHtml('Parents', [p.father, p.mother].filter(Boolean))}${listHtml('Siblings', siblings)}${listHtml('Spouses', p.spouses || [])}${listHtml('Children', p.children || [])}</div>`;
   const fd = document.getElementById('floatingDetail'); fd.innerHTML = html; fd.classList.remove('collapsed'); wireCollapseButtons(); document.querySelectorAll('#collapseDetailBtn, #collapseDetailBtnInner').forEach(b => { if (b) b.textContent = '−'; });
@@ -597,7 +669,7 @@ function eventSpecificityScore(ev) {
 function bestEventForPerson(pid, applyCurrentFilters) {
   const ctl = getCurrentControls();
   let rows = (eventsByPerson.get(pid) || []).filter(ev => ev.lat != null && ev.lon != null);
-  if (applyCurrentFilters) rows = rows.filter(ev => (!ctl.hideBroadOnly || !isBroad(ev)) && eventInRange(ev, ctl.yMin, ctl.yMax));
+  if (applyCurrentFilters) rows = rows.filter(ev => eventInRange(ev, ctl.yMin, ctl.yMax));
   rows = rows.slice().sort((a,b) => {
     const sa = eventSpecificityScore(a), sb = eventSpecificityScore(b);
     if (sa !== sb) return sa - sb;
@@ -615,6 +687,47 @@ window.selectPersonFromArea = function(pid) {
   if (marker) { marker.openPopup(); map.panTo(marker.getLatLng()); }
 };
 
+function pickPreferredRenderEvent(current, candidate) {
+  if (!current) return candidate;
+  const scCur = eventSpecificityScore(current), scNew = eventSpecificityScore(candidate);
+  if (scNew < scCur) return candidate;
+  if (scNew > scCur) return current;
+  const midCur = eventMid(current), midNew = eventMid(candidate);
+  if (midNew != null && midCur == null) return candidate;
+  if (midNew == null && midCur != null) return current;
+  if (midNew != null && midCur != null && midNew < midCur) return candidate;
+  return current;
+}
+function simplifyRenderEvents(rows, forceIds) {
+  const forced = [];
+  const byPerson = new Map();
+  for (const ev of rows) {
+    if (forceIds.has(ev.pid)) { forced.push(ev); continue; }
+    byPerson.set(ev.pid, pickPreferredRenderEvent(byPerson.get(ev.pid), ev));
+  }
+  return forced.concat([...byPerson.values()]);
+}
+function arrowAngleDeg(from, to) {
+  return Math.atan2(to[0] - from[0], to[1] - from[1]) * 180 / Math.PI;
+}
+function addArrowHead(layer, from, to, color, opacity = 0.8, size = 8) {
+  const lat = from[0] + (to[0] - from[0]) * 0.72;
+  const lon = from[1] + (to[1] - from[1]) * 0.72;
+  const angle = arrowAngleDeg(from, to);
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="width:0;height:0;border-top:${Math.round(size * 0.58)}px solid transparent;border-bottom:${Math.round(size * 0.58)}px solid transparent;border-left:${size}px solid ${color};opacity:${opacity};transform:rotate(${angle}deg);"></div>`,
+    iconSize: [size, size],
+    iconAnchor: [Math.round(size * 0.5), Math.round(size * 0.5)]
+  });
+  L.marker([lat, lon], { icon, interactive: false, keyboard: false }).addTo(layer);
+}
+function addArrowedPolyline(layer, coords, style, arrowSize = 8) {
+  if (!coords || coords.length < 2) return;
+  L.polyline(coords, style).addTo(layer);
+  addArrowHead(layer, coords[coords.length - 2], coords[coords.length - 1], style.color || '#1d4ed8', style.opacity == null ? 0.8 : style.opacity, arrowSize);
+}
+
 const map = L.map('map', { preferCanvas: true, zoomSnap: 0.25 }).setView([46.5, -87.6], 3);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
 const eventLayer = L.layerGroup().addTo(map), pathLayer = L.layerGroup().addTo(map), connectorLayer = L.layerGroup().addTo(map), bubbleLayer = L.layerGroup().addTo(map);
@@ -625,7 +738,17 @@ function render(fitToData) {
   if (!state.selectedBranches.size) { for (const pid of scope.included) { const p = peopleById.get(pid); if (p?.branch) state.selectedBranches.add(p.branch); } }
   const ctl = getCurrentControls();
   refreshBranchList(scope, ctl);
-  document.getElementById('genDepth').max = scope.genMax; if (Number(document.getElementById('genDepth').value) > scope.genMax) document.getElementById('genDepth').value = scope.genMax; document.getElementById('genVal').textContent = document.getElementById('genDepth').value; document.getElementById('genMaxVal').textContent = scope.genMax;
+  const genDepthEl = document.getElementById('genDepth');
+  const scopeSig = `${state.mode}|${state.homeId}|${scope.genMax}`;
+  genDepthEl.max = scope.genMax;
+  if (state.lastScopeSig !== scopeSig) {
+    genDepthEl.value = scope.genMax;
+    state.lastScopeSig = scopeSig;
+  } else if (Number(genDepthEl.value) > scope.genMax) {
+    genDepthEl.value = scope.genMax;
+  }
+  document.getElementById('genVal').textContent = genDepthEl.value;
+  document.getElementById('genMaxVal').textContent = scope.genMax;
   const scopeEventsObj = getScopeEvents(scope);
   const scopeEvents = scopeEventsObj.rows;
   const minAll = scopeEventsObj.minYear; const maxAll = scopeEventsObj.maxYear;
@@ -638,10 +761,11 @@ function render(fitToData) {
 
   const renderBounds = map.getBounds().pad(0.18);
   const forceIds = new Set([state.homeId, state.selectedPersonId, state.focusedPersonId].filter(Boolean));
-  const heavyViewportMode = visibleEvents.length > 2200;
-  const renderEvents = heavyViewportMode
+  const heavyViewportMode = visibleEvents.length > 900;
+  let renderEvents = heavyViewportMode
     ? visibleEvents.filter(ev => forceIds.has(ev.pid) || renderBounds.contains([ev.lat, ev.lon]))
-    : visibleEvents;
+    : visibleEvents.slice();
+  if (heavyViewportMode && renderEvents.length > 1600) renderEvents = simplifyRenderEvents(renderEvents, forceIds);
 
   const areaMap = new Map();
   const firstVisibleEventByPerson = new Map();
@@ -655,46 +779,47 @@ function render(fitToData) {
   }
 
   {
-    const showAllPaths = document.getElementById('showPaths').checked;
-    const pathTarget = showAllPaths ? null : state.selectedPersonId;
-    const personEvents = new Map();
-    for (const ev of visibleEvents) {
-      if (pathTarget && ev.pid !== pathTarget) continue;
-      if (!personEvents.has(ev.pid)) personEvents.set(ev.pid, []);
-      personEvents.get(ev.pid).push(ev);
-    }
-    for (const [pid, evs] of personEvents.entries()) {
-      const pts = evs.slice().sort((a,b)=>(eventMid(a) ?? 99999) - (eventMid(b) ?? 99999)).filter(ev=>ev.lat!=null&&ev.lon!=null);
+    const pathTarget = state.selectedPersonId;
+    if (pathTarget) {
+      const pts = visibleEvents.filter(ev => ev.pid === pathTarget && ev.lat != null && ev.lon != null)
+        .slice()
+        .sort((a,b)=>(eventMid(a) ?? 99999) - (eventMid(b) ?? 99999));
       if (pts.length > 1) {
-        const color = lineColorForPerson(pid); const pale = pts.every(isBroad);
-        L.polyline(pts.map(ev=>[ev.lat,ev.lon]), {color, weight: showAllPaths ? 2.5 : 3.2, opacity: pale ? 0.18 : (showAllPaths ? 0.5 : 0.78)}).addTo(pathLayer);
+        const color = lineColorForPerson(pathTarget);
+        const pale = pts.every(isBroad);
+        addArrowedPolyline(pathLayer, pts.map(ev=>[ev.lat,ev.lon]), {color, weight: 3.2, opacity: pale ? 0.24 : 0.78}, 10);
       }
     }
   }
 
-  if (document.getElementById('showConnectors').checked) {
-    for (const pid of visiblePeople) {
-      const p = peopleById.get(pid); if (!p) continue;
-      const childEv = firstVisibleEventByPerson.get(pid); if (!childEv) continue;
-      for (const par of [p.father, p.mother]) {
-        if (!par || !visiblePeople.has(par)) continue;
-        const parentEv = firstVisibleEventByPerson.get(par); if (!parentEv) continue;
-        const color = lineColorForPerson(pid); const pale = isBroad(childEv) || isBroad(parentEv);
-        L.polyline([[childEv.lat, childEv.lon],[parentEv.lat,parentEv.lon]], {color, weight: 1.4, opacity: pale ? 0.12 : 0.33, dashArray: '4,4'}).addTo(connectorLayer);
+  {
+    const pid = state.selectedPersonId;
+    if (pid && visiblePeople.has(pid)) {
+      const p = peopleById.get(pid);
+      const childEv = firstVisibleEventByPerson.get(pid);
+      if (p && childEv) {
+        for (const par of [p.father, p.mother]) {
+          if (!par || !visiblePeople.has(par)) continue;
+          const parentEv = firstVisibleEventByPerson.get(par);
+          if (!parentEv) continue;
+          const color = lineColorForPerson(pid);
+          const pale = isBroad(childEv) || isBroad(parentEv);
+          addArrowedPolyline(connectorLayer, [[childEv.lat, childEv.lon],[parentEv.lat,parentEv.lon]], {color, weight: 1.6, opacity: pale ? 0.16 : 0.36, dashArray: '4,4'}, 7);
+        }
       }
     }
   }
 
   for (const [key, rows] of areaMap.entries()) {
     const first = rows[0]; const uniquePeople = new Set(rows.map(r => r.pid));
-    if (rows.length > 1 && document.getElementById('showAreaBubbles').checked) {
+    if (rows.length > 1) {
       const icon = L.divIcon({className:'', html:`<div class="area-bubble" style="width:30px;height:30px;">${uniquePeople.size}</div>`, iconSize:[30,30], iconAnchor:[15,15]});
       const m = L.marker([first.lat, first.lon], {icon}).addTo(bubbleLayer); m.bindPopup(popupHtmlForArea(rows));
     } else {
       const pid = first.pid; const color = colorForPerson(pid); const pale = isBroad(first);
       const marker = L.circleMarker([first.lat, first.lon], {radius: pid===state.homeId?7:5.5, color:'#000', fillColor: color, fillOpacity: pale ? 0.22 : 0.72, opacity: 0.95, weight: 1.25});
       marker.addTo(eventLayer).bindPopup(`<div><strong>${esc(first.name)}</strong></div><div>${esc(first.type)} &middot; ${esc(first.date || (first.y0===first.y1 ? first.y0 : `${first.y0 ?? '?'}–${first.y1 ?? '?'}`))}</div><div>${esc(first.placeOrig || first.placeStd || 'Unknown place')}</div><div class="note">${esc(first.note || '')}</div>`);
-      marker.on('click', ()=>{ state.focusedPersonId = pid; state.selectedPersonId = pid; showDetails(pid); render(false); });
+      marker.on('click', ()=>{ state.focusedPersonId = pid; state.selectedPersonId = pid; showDetails(pid); scheduleRender(false, 20); });
       currentMarkerRefs.set(pid, marker);
     }
   }
@@ -709,9 +834,8 @@ function wireCollapseButtons() {
   const btns = [document.getElementById('collapseDetailBtn'), document.getElementById('collapseDetailBtnInner')].filter(Boolean);
   btns.forEach(btn => btn.onclick = () => { const fd = document.getElementById('floatingDetail'); fd.classList.toggle('collapsed'); const collapsed = fd.classList.contains('collapsed'); document.querySelectorAll('#collapseDetailBtn, #collapseDetailBtnInner').forEach(b => { if (b) b.textContent = collapsed ? '+' : '−'; }); });
 }
-function setHomeFromInput() { const val = document.getElementById('homeInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.homeId = id; state.focusedPersonId = id; state.selectedPersonId = id; state.selectedBranches = new Set(); state.initializedDates = false; state.branchUiSig = null; map.on('moveend zoomend', () => scheduleRender(false, 40));
-render(true); }
-function focusPerson() { const val = document.getElementById('focusInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.focusedPersonId = id; state.selectedPersonId = id; showDetails(id); render(false); const ev = bestEventForPerson(id, true) || bestEventForPerson(id, false); if (ev) map.setView([ev.lat, ev.lon], Math.max(map.getZoom(), 8)); }
+function setHomeFromInput() { const val = document.getElementById('homeInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.homeId = id; state.focusedPersonId = id; state.selectedPersonId = id; state.selectedBranches = new Set(); state.initializedDates = false; state.branchUiSig = null; showLoading('Rebuilding the map around a new home person.', 'A broader home person can briefly make the tree heavier.'); requestAnimationFrame(() => setTimeout(() => { try { render(true); } finally { hideLoading(); } }, 0)); }
+function focusPerson() { const val = document.getElementById('focusInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.focusedPersonId = id; state.selectedPersonId = id; showDetails(id); scheduleRender(false, 20); const ev = bestEventForPerson(id, true) || bestEventForPerson(id, false); if (ev) map.setView([ev.lat, ev.lon], Math.max(map.getZoom(), 8)); }
 
 let renderQueued = false, pendingFitToData = false, renderTimer = null;
 function scheduleRender(fitToData, debounceMs = 0) {
@@ -736,15 +860,17 @@ document.getElementById('focusBtn').addEventListener('click', focusPerson);
 document.getElementById('branchSearch').addEventListener('input', ()=>{ state.branchUiSig = null; refreshBranchList(state.currentScope || computeScopeCached(state.homeId), getCurrentControls()); });
 document.getElementById('allBranchesBtn').addEventListener('click', ()=>{ state.selectedBranches = new Set([...scopeBranches(state.currentScope || computeScopeCached(state.homeId))]); state.branchUiSig = null; scheduleRender(false); });
 document.getElementById('clearBranchesBtn').addEventListener('click', ()=>{ state.selectedBranches = new Set(); state.branchUiSig = null; scheduleRender(false); });
-document.getElementById('modeSelect').addEventListener('change', e=>{ state.mode = e.target.value; state.selectedBranches = new Set(); state.initializedDates = false; state.branchUiSig = null; scheduleRender(true); });
-['showDirect','showSiblings','showSpouses','showPaths','showConnectors','showAreaBubbles','hideBroadOnly'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>scheduleRender(false)));
+document.getElementById('modeSelect').addEventListener('change', e=>{ state.mode = e.target.value; state.selectedBranches = new Set(); state.initializedDates = false; state.branchUiSig = null; showLoading('Loading family data…', 'Switching map scope can be heavy for the full GEDCOM.'); requestAnimationFrame(() => setTimeout(() => { try { render(true); } finally { hideLoading(); } }, 0)); });
+['showDirect','showSiblings','showSpouses'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>scheduleRender(false)));
 ['genDepth','dateMin','dateMax'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>scheduleRender(false, 75)));
 document.querySelectorAll('input[name="side"]').forEach(el=>el.addEventListener('change', ()=>{ state.branchUiSig = null; scheduleRender(false); }));
 document.getElementById('genDepth').addEventListener('input', ()=>{ document.getElementById('genVal').textContent = document.getElementById('genDepth').value; });
 document.getElementById('dateMin').addEventListener('input', ()=>{ if (Number(dateMin.value) > Number(dateMax.value)) dateMin.value = dateMax.value; document.getElementById('dateMinVal').textContent = dateMin.value; scheduleRender(false, 75); });
 document.getElementById('dateMax').addEventListener('input', ()=>{ if (Number(dateMax.value) < Number(dateMin.value)) dateMax.value = dateMin.value; document.getElementById('dateMaxVal').textContent = dateMax.value; scheduleRender(false, 75); });
 
-render(true);
+map.on('moveend zoomend', () => scheduleRender(false, 60));
+showLoading('Loading family data…', 'The first build can take a little longer because the map is indexing the tree.');
+requestAnimationFrame(() => setTimeout(() => { try { render(true); } finally { hideLoading(); } }, 0));
 
 const mobileControlsBtn = document.getElementById('mobileControlsBtn');
 const mobileCloseBtn = document.getElementById('mobileCloseBtn');
