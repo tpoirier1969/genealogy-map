@@ -1,13 +1,1 @@
-Genealogy Map - Latest Package
-
-Files included:
-- index.html
-  Current patched working file (v17.5 branch build) for deployment.
-
-Backup/reference files:
-- backups/index_v17_1_backup.html
-  Backup base file used before the v17.5 patch line.
-- backups/index_before_patch_20260312_2.html
-  Earlier pre-patch backup from this session.
-- backups/index_original_before_patch.html
-  Original backup from the earlier patch session.
+index.html = v18.1 patched build with globe favicon, France centroid fixes, and zoom-aware bubble aggregation
