@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Family Distribution History v18.4</title>
+<title>Family Distribution History v18.5</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="theme-color" content="#1d4ed8"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -125,7 +125,7 @@ body.mobile-sidebar-open{overflow:hidden;}
 <button id="mobileMenuFab" class="mobile-only" type="button" aria-label="Open map menu" aria-expanded="false">☰ Menu</button>
 <div id="sidebar">
 <div class="sidebar-mobile-head mobile-only"><div class="sidebar-mobile-title">Map controls</div><button id="mobileCloseBtn" type="button" aria-label="Close controls">✕</button></div>
-<div class="title-row"><h1>Family Distribution History <span class="version-pill">v18.4</span></h1><button id="mobileControlsBtn" class="mobile-only" type="button" aria-label="Open controls">☰ Controls</button></div>
+<div class="title-row"><h1>Family Distribution History <span class="version-pill">v18.5</span></h1><button id="mobileControlsBtn" class="mobile-only" type="button" aria-label="Open controls">☰ Controls</button></div>
 <div class="small">Default home person is Tod Poirier. Historical mode shows direct ancestors plus optional siblings, with spouses limited to qualifying direct-line people. Full modern family shows the broader modern family (1850+). Full family GEDCOM shows the entire tree. On phones, the controls live in the Menu button so the map gets more breathing room.</div>
 
 <div class="control">
@@ -169,7 +169,7 @@ body.mobile-sidebar-open{overflow:hidden;}
 <label>People type</label>
 <div class="check-row">
 <label><input id="showDirect" type="checkbox" checked/> Direct ancestors</label>
-<label><input id="showSiblings" type="checkbox" checked/> Siblings of direct ancestors</label>
+<label><input id="showSiblings" type="checkbox"/> Siblings of direct ancestors</label>
 <label><input id="showSpouses" type="checkbox" checked/> Spouses</label>
 </div>
 </div>
@@ -295,7 +295,7 @@ function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
 function eventInRange(ev, yMin, yMax) { if (ev.y1 != null && ev.y1 < yMin) return false; if (ev.y0 != null && ev.y0 > yMax) return false; if (ev.y0 != null || ev.y1 != null) return true; const p = peopleById.get(ev.pid) || {}; if (p.maxYear != null && p.maxYear < yMin) return false; if (p.minYear != null && p.minYear > yMax) return false; return p.minYear != null || p.maxYear != null; }
 function lifeYears(pid) { const p = peopleById.get(pid) || {}; const a = p.minYear ?? '?'; const b = p.maxYear ?? '?'; return `(${a}–${b})`; }
 
-const state = { mode: 'historical', homeId: DEFAULT_HOME_ID, selectedBranches: new Set(), focusedPersonId: DEFAULT_HOME_ID, currentScope: null, initializedDates: false, selectedPersonId: null, detailCollapsed: false, lastScopeSig: null, statusTimer: null, loadingVisible: true, dataVersion: 1, loadedChunkIds: new Set((window.FAMILY_DATA_PROGRESS && window.FAMILY_DATA_PROGRESS.loadedChunkIds) || []), loadedThroughYear: (window.FAMILY_DATA_PROGRESS && window.FAMILY_DATA_PROGRESS.loadedThroughYear) || null, totalChunks: ((window.FAMILY_DATA_MANIFEST && window.FAMILY_DATA_MANIFEST.chunks) || []).length, progressiveLoading: false, forceFullNextRender: false, popupPidToReopen: null };
+const state = { mode: 'historical', homeId: DEFAULT_HOME_ID, selectedBranches: new Set(), focusedPersonId: DEFAULT_HOME_ID, currentScope: null, initializedDates: false, selectedPersonId: null, detailCollapsed: false, lastScopeSig: null, statusTimer: null, loadingVisible: true, dataVersion: 1, loadedChunkIds: new Set((window.FAMILY_DATA_PROGRESS && window.FAMILY_DATA_PROGRESS.loadedChunkIds) || []), loadedThroughYear: (window.FAMILY_DATA_PROGRESS && window.FAMILY_DATA_PROGRESS.loadedThroughYear) || null, totalChunks: ((window.FAMILY_DATA_MANIFEST && window.FAMILY_DATA_MANIFEST.chunks) || []).length, progressiveLoading: false, forceFullNextRender: false, popupPidToReopen: null, lastVisiblePeople: new Set(), lastVisibleEvents: [], lastFirstVisibleEventByPerson: new Map() };
 
 const loadingOverlay = document.getElementById('loadingOverlay');
 const loadingText = document.getElementById('loadingText');
@@ -850,9 +850,11 @@ function bestEventForPerson(pid, applyCurrentFilters) {
   return rows[0] || null;
 }
 window.selectPersonFromArea = function(pid) {
-  state.focusedPersonId = pid; state.selectedPersonId = pid; showDetails(pid);
+  state.focusedPersonId = pid; state.selectedPersonId = pid; state.popupPidToReopen = pid; showDetails(pid);
+  renderSelectionOverlays();
   const marker = currentMarkerRefs.get(pid);
   if (marker) { marker.openPopup(); map.panTo(marker.getLatLng()); }
+  else { scheduleRender(false, 0); }
 };
 
 const map = L.map('map', { preferCanvas: true, zoomSnap: 0.25 }).setView([46.5, -87.6], 3);
@@ -893,6 +895,46 @@ function drawArrowedPolyline(latlngs, opts = {}) {
 function drawArrowedConnector(from, to, opts = {}) {
   L.polyline([from, to], opts).addTo(connectorLayer);
   addArrowHead(from, to, opts.color || '#333', Math.min(0.9, (opts.opacity ?? 0.45) + 0.16), Math.max(1.8, (opts.weight ?? 1.4)));
+}
+
+function renderSelectionOverlays(visiblePeople = state.lastVisiblePeople, visibleEvents = state.lastVisibleEvents, firstVisibleEventByPerson = state.lastFirstVisibleEventByPerson) {
+  pathLayer.clearLayers();
+  connectorLayer.clearLayers();
+  if (!state.selectedPersonId || !visibleEvents || !visibleEvents.length) return;
+
+  const pid = state.selectedPersonId;
+  const evs = visibleEvents.filter(ev => ev.pid === pid).slice().sort((a,b)=>(eventMid(a) ?? 99999) - (eventMid(b) ?? 99999)).filter(ev=>ev.lat!=null&&ev.lon!=null);
+  const dedupedPts = [];
+  for (const ev of evs) {
+    const ll = [ev.lat, ev.lon];
+    const prev = dedupedPts[dedupedPts.length - 1];
+    if (!prev || prev[0] !== ll[0] || prev[1] !== ll[1]) dedupedPts.push(ll);
+  }
+  if (dedupedPts.length > 1) {
+    const color = lineColorForPerson(pid);
+    const pale = evs.every(isBroad);
+    drawArrowedPolyline(dedupedPts, {color, weight: 3.1, opacity: pale ? 0.22 : 0.82, lineCap:'round', lineJoin:'round'});
+  }
+
+  const selected = peopleById.get(pid);
+  const selectedEv = firstVisibleEventByPerson?.get(pid);
+  if (selected && selectedEv) {
+    const color = lineColorForPerson(pid);
+
+    for (const par of [selected.father, selected.mother]) {
+      if (!par || !visiblePeople?.has(par)) continue;
+      const parentEv = firstVisibleEventByPerson.get(par); if (!parentEv) continue;
+      const pale = isBroad(selectedEv) || isBroad(parentEv);
+      drawArrowedConnector([parentEv.lat, parentEv.lon], [selectedEv.lat, selectedEv.lon], {color, weight: 1.6, opacity: pale ? 0.2 : 0.42, dashArray:'4,4'});
+    }
+
+    for (const childId of (selected.children || [])) {
+      if (!visiblePeople?.has(childId)) continue;
+      const childEv = firstVisibleEventByPerson.get(childId); if (!childEv) continue;
+      const pale = isBroad(selectedEv) || isBroad(childEv);
+      drawArrowedConnector([selectedEv.lat, selectedEv.lon], [childEv.lat, childEv.lon], {color, weight: 1.6, opacity: pale ? 0.2 : 0.42, dashArray:'4,4'});
+    }
+  }
 }
 
 function render(fitToData) {
@@ -976,40 +1018,11 @@ function render(fitToData) {
     areaGroups.get(groupKey).push(...rows);
   }
 
-  if (state.selectedPersonId) {
-    const pid = state.selectedPersonId;
-    const evs = visibleEvents.filter(ev => ev.pid === pid).slice().sort((a,b)=>(eventMid(a) ?? 99999) - (eventMid(b) ?? 99999)).filter(ev=>ev.lat!=null&&ev.lon!=null);
-    const dedupedPts = [];
-    for (const ev of evs) {
-      const ll = [ev.lat, ev.lon];
-      const prev = dedupedPts[dedupedPts.length - 1];
-      if (!prev || prev[0] !== ll[0] || prev[1] !== ll[1]) dedupedPts.push(ll);
-    }
-    if (dedupedPts.length > 1) {
-      const color = lineColorForPerson(pid); const pale = evs.every(isBroad);
-      drawArrowedPolyline(dedupedPts, {color, weight: 3.1, opacity: pale ? 0.22 : 0.82, lineCap:'round', lineJoin:'round'});
-    }
+  state.lastVisiblePeople = visiblePeople;
+  state.lastVisibleEvents = visibleEvents;
+  state.lastFirstVisibleEventByPerson = firstVisibleEventByPerson;
+  renderSelectionOverlays(visiblePeople, visibleEvents, firstVisibleEventByPerson);
 
-    const selected = peopleById.get(pid);
-    const selectedEv = firstVisibleEventByPerson.get(pid);
-    if (selected && selectedEv) {
-      const color = lineColorForPerson(pid);
-
-      for (const par of [selected.father, selected.mother]) {
-        if (!par || !visiblePeople.has(par)) continue;
-        const parentEv = firstVisibleEventByPerson.get(par); if (!parentEv) continue;
-        const pale = isBroad(selectedEv) || isBroad(parentEv);
-        drawArrowedConnector([parentEv.lat, parentEv.lon], [selectedEv.lat, selectedEv.lon], {color, weight: 1.6, opacity: pale ? 0.2 : 0.42, dashArray:'4,4'});
-      }
-
-      for (const childId of (selected.children || [])) {
-        if (!visiblePeople.has(childId)) continue;
-        const childEv = firstVisibleEventByPerson.get(childId); if (!childEv) continue;
-        const pale = isBroad(selectedEv) || isBroad(childEv);
-        drawArrowedConnector([selectedEv.lat, selectedEv.lon], [childEv.lat, childEv.lon], {color, weight: 1.6, opacity: pale ? 0.2 : 0.42, dashArray:'4,4'});
-      }
-    }
-  }
 
   for (const rows of areaGroups.values()) {
     const first = rows[0]; const uniquePeople = new Set(rows.map(r => r.pid));
@@ -1023,13 +1036,14 @@ function render(fitToData) {
       const pid = first.pid; const color = colorForPerson(pid); const pale = isBroad(first);
       const marker = L.circleMarker([first.lat, first.lon], {radius: pid===state.homeId?7:5.5, color:'#000', fillColor: color, fillOpacity: pale ? 0.22 : 0.72, opacity: 0.95, weight: 1.25});
       marker.addTo(eventLayer).bindPopup(`<div><strong>${esc(first.name)}</strong></div><div>${esc(first.type)} &middot; ${esc(first.date || (first.y0===first.y1 ? first.y0 : `${first.y0 ?? '?'}–${first.y1 ?? '?'}`))}</div><div>${esc(first.placeOrig || first.placeStd || 'Unknown place')}</div><div class="note">${esc(first.note || '')}</div>`);
-      marker.on('click', ()=>{ state.focusedPersonId = pid; state.selectedPersonId = pid; state.popupPidToReopen = pid; showDetails(pid); scheduleRender(false, 0); });
+      marker.on('click', ()=>{ state.focusedPersonId = pid; state.selectedPersonId = pid; state.popupPidToReopen = pid; showDetails(pid); renderSelectionOverlays(); });
       marker.on('popupclose', ()=>{ if (state.popupPidToReopen === pid) state.popupPidToReopen = null; });
       currentMarkerRefs.set(pid, marker);
     }
   }
 
   if (fitToData && visibleEvents.length) { map.fitBounds(L.latLngBounds(visibleEvents.map(ev=>[ev.lat, ev.lon])).pad(0.18), {maxZoom: 8}); }
+  renderSelectionOverlays(state.lastVisiblePeople, state.lastVisibleEvents, state.lastFirstVisibleEventByPerson);
   if (heavyViewportMode) { document.getElementById('detailHint').setAttribute('data-rendered', `${renderEvents.length}/${visibleEvents.length}`); } else { document.getElementById('detailHint').removeAttribute('data-rendered'); }
   if (state.focusedPersonId) showDetails(state.focusedPersonId);
   if (state.popupPidToReopen && currentMarkerRefs.has(state.popupPidToReopen)) {
@@ -1056,7 +1070,7 @@ function wireCollapseButtons() {
   });
 }
 function setHomeFromInput() { const val = document.getElementById('homeInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.homeId = id; state.focusedPersonId = id; state.selectedPersonId = null; state.selectedBranches = new Set(); state.initializedDates = false; state.branchUiSig = null; applyImmediateFilterChange(true, 'Rebuilding the map around a new home person.', 'Refreshing the scope for the new home person.'); }
-function focusPerson() { const val = document.getElementById('focusInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.focusedPersonId = id; state.selectedPersonId = id; showDetails(id); scheduleRender(false, 20); const ev = bestEventForPerson(id, true) || bestEventForPerson(id, false); if (ev) map.setView([ev.lat, ev.lon], Math.max(map.getZoom(), 8)); }
+function focusPerson() { const val = document.getElementById('focusInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.focusedPersonId = id; state.selectedPersonId = id; state.popupPidToReopen = id; showDetails(id); renderSelectionOverlays(); scheduleRender(false, 0); const ev = bestEventForPerson(id, true) || bestEventForPerson(id, false); if (ev) map.setView([ev.lat, ev.lon], Math.max(map.getZoom(), 8)); }
 
 
 let renderQueued = false, pendingFitToData = false, renderTimer = null, rerenderRequested = false, renderSerial = 0;
@@ -1098,7 +1112,31 @@ function applyImmediateFilterChange(fitToData = false, loadingMessage = '', load
   rerenderRequested = false;
   state.forceFullNextRender = true;
   state.scopeEventsKey = null;
-  scheduleRender(fitToData, 0);
+  state.branchUiSig = null;
+  state.popupPidToReopen = null;
+  pendingFitToData = pendingFitToData || !!fitToData;
+  renderSerial += 1;
+  const serial = renderSerial;
+  requestAnimationFrame(() => {
+    if (serial !== renderSerial) return;
+    if (renderQueued) { rerenderRequested = true; return; }
+    renderQueued = true;
+    const fit = pendingFitToData;
+    pendingFitToData = false;
+    try {
+      map.invalidateSize(false);
+      render(fit);
+    } catch (err) {
+      console.error(err);
+      hideLoading();
+      showStatus('A redraw error occurred. The map kept the last successful view; try the change again or reload.', 0);
+    } finally {
+      renderQueued = false;
+      const again = rerenderRequested;
+      rerenderRequested = false;
+      if (again) scheduleRender(false, 0);
+    }
+  });
 }
 
 
