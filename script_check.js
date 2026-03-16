@@ -69,7 +69,7 @@ function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
 function eventInRange(ev, yMin, yMax) { if (ev.y1 != null && ev.y1 < yMin) return false; if (ev.y0 != null && ev.y0 > yMax) return false; if (ev.y0 != null || ev.y1 != null) return true; const p = peopleById.get(ev.pid) || {}; if (p.maxYear != null && p.maxYear < yMin) return false; if (p.minYear != null && p.minYear > yMax) return false; return p.minYear != null || p.maxYear != null; }
 function lifeYears(pid) { const p = peopleById.get(pid) || {}; const a = p.minYear ?? '?'; const b = p.maxYear ?? '?'; return `(${a}–${b})`; }
 
-const state = { mode: 'historical', homeId: DEFAULT_HOME_ID, selectedBranches: new Set(), focusedPersonId: DEFAULT_HOME_ID, currentScope: null, initializedDates: false, selectedPersonId: null, detailCollapsed: false, lastScopeSig: null, statusTimer: null, loadingVisible: true, dataVersion: 1, loadedChunkIds: new Set((window.FAMILY_DATA_PROGRESS && window.FAMILY_DATA_PROGRESS.loadedChunkIds) || []), loadedThroughYear: (window.FAMILY_DATA_PROGRESS && window.FAMILY_DATA_PROGRESS.loadedThroughYear) || null, totalChunks: ((window.FAMILY_DATA_MANIFEST && window.FAMILY_DATA_MANIFEST.chunks) || []).length, progressiveLoading: false };
+const state = { mode: 'historical', homeId: DEFAULT_HOME_ID, selectedBranches: new Set(), focusedPersonId: DEFAULT_HOME_ID, currentScope: null, initializedDates: false, selectedPersonId: null, detailCollapsed: false, lastScopeSig: null, statusTimer: null, loadingVisible: true, dataVersion: 1, loadedChunkIds: new Set((window.FAMILY_DATA_PROGRESS && window.FAMILY_DATA_PROGRESS.loadedChunkIds) || []), loadedThroughYear: (window.FAMILY_DATA_PROGRESS && window.FAMILY_DATA_PROGRESS.loadedThroughYear) || null, totalChunks: ((window.FAMILY_DATA_MANIFEST && window.FAMILY_DATA_MANIFEST.chunks) || []).length, progressiveLoading: false, forceFullNextRender: false, popupPidToReopen: null };
 
 const loadingOverlay = document.getElementById('loadingOverlay');
 const loadingText = document.getElementById('loadingText');
@@ -342,7 +342,8 @@ function computeHistoricalScope(homeId) {
     }
   }
   for (const pid of [...included]) {
-    if (pid === homeId) continue;
+    const srcRel = rel.get(pid) || 'other';
+    if (pid !== homeId && srcRel !== 'direct') continue;
     const p = peopleById.get(pid); const spouses = p?.spouses || [];
     for (const sp of spouses) {
       if (!peopleById.has(sp)) continue;
@@ -702,7 +703,7 @@ function render(fitToData) {
 
   const renderBounds = map.getBounds().pad(0.18);
   const forceIds = new Set([state.homeId, state.selectedPersonId, state.focusedPersonId].filter(Boolean));
-  const heavyViewportMode = visibleEvents.length > 900;
+  const heavyViewportMode = visibleEvents.length > 900 && !state.forceFullNextRender;
   let renderEvents = heavyViewportMode
     ? visibleEvents.filter(ev => forceIds.has(ev.pid) || renderBounds.contains([ev.lat, ev.lon]))
     : visibleEvents.slice();
@@ -796,7 +797,8 @@ function render(fitToData) {
       const pid = first.pid; const color = colorForPerson(pid); const pale = isBroad(first);
       const marker = L.circleMarker([first.lat, first.lon], {radius: pid===state.homeId?7:5.5, color:'#000', fillColor: color, fillOpacity: pale ? 0.22 : 0.72, opacity: 0.95, weight: 1.25});
       marker.addTo(eventLayer).bindPopup(`<div><strong>${esc(first.name)}</strong></div><div>${esc(first.type)} &middot; ${esc(first.date || (first.y0===first.y1 ? first.y0 : `${first.y0 ?? '?'}–${first.y1 ?? '?'}`))}</div><div>${esc(first.placeOrig || first.placeStd || 'Unknown place')}</div><div class="note">${esc(first.note || '')}</div>`);
-      marker.on('click', ()=>{ state.focusedPersonId = pid; state.selectedPersonId = pid; showDetails(pid); scheduleRender(false, 20); });
+      marker.on('click', ()=>{ state.focusedPersonId = pid; state.selectedPersonId = pid; state.popupPidToReopen = pid; showDetails(pid); scheduleRender(false, 0); });
+      marker.on('popupclose', ()=>{ if (state.popupPidToReopen === pid) state.popupPidToReopen = null; });
       currentMarkerRefs.set(pid, marker);
     }
   }
@@ -804,6 +806,11 @@ function render(fitToData) {
   if (fitToData && visibleEvents.length) { map.fitBounds(L.latLngBounds(visibleEvents.map(ev=>[ev.lat, ev.lon])).pad(0.18), {maxZoom: 8}); }
   if (heavyViewportMode) { document.getElementById('detailHint').setAttribute('data-rendered', `${renderEvents.length}/${visibleEvents.length}`); } else { document.getElementById('detailHint').removeAttribute('data-rendered'); }
   if (state.focusedPersonId) showDetails(state.focusedPersonId);
+  if (state.popupPidToReopen && currentMarkerRefs.has(state.popupPidToReopen)) {
+    const markerToOpen = currentMarkerRefs.get(state.popupPidToReopen);
+    if (markerToOpen && typeof markerToOpen.openPopup === 'function') markerToOpen.openPopup();
+  }
+  state.forceFullNextRender = false;
   hideLoading();
 }
 
@@ -863,6 +870,8 @@ function applyImmediateFilterChange(fitToData = false, loadingMessage = '', load
   if (loadingMessage) showLoading(loadingMessage, loadingMeta || 'Refreshing the visible family data.');
   if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
   rerenderRequested = false;
+  state.forceFullNextRender = true;
+  state.scopeEventsKey = null;
   scheduleRender(fitToData, 0);
 }
 

@@ -1,6 +1,6 @@
-Family Distribution History v18.2
+Family Distribution History v18.4
 Data split by century chunks: 17
-Includes France approximate-center coordinate cleanup (429 records corrected)
-Historical scope tightened to exclude siblings/spouses of the home person from the ancestor-only view
-Immediate filter redraw fix applied
-Zoom-aware area-bubble aggregation applied
+Immediate filter-change redraw strengthened (forces a real refresh without waiting for pan/zoom)
+Popup persistence improved for person markers
+Historical spouse scope narrowed to direct-line qualifying people
+Targeted geography cleanup applied for ocean/out-of-region points, including Ansel Eilola and Australia/Vietnam repairs
