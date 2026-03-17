@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Family Distribution History v18.5</title>
+<title>Family Distribution History v18.6</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="theme-color" content="#1d4ed8"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -125,7 +125,7 @@ body.mobile-sidebar-open{overflow:hidden;}
 <button id="mobileMenuFab" class="mobile-only" type="button" aria-label="Open map menu" aria-expanded="false">☰ Menu</button>
 <div id="sidebar">
 <div class="sidebar-mobile-head mobile-only"><div class="sidebar-mobile-title">Map controls</div><button id="mobileCloseBtn" type="button" aria-label="Close controls">✕</button></div>
-<div class="title-row"><h1>Family Distribution History <span class="version-pill">v18.5</span></h1><button id="mobileControlsBtn" class="mobile-only" type="button" aria-label="Open controls">☰ Controls</button></div>
+<div class="title-row"><h1>Family Distribution History <span class="version-pill">v18.6</span></h1><button id="mobileControlsBtn" class="mobile-only" type="button" aria-label="Open controls">☰ Controls</button></div>
 <div class="small">Default home person is Tod Poirier. Historical mode shows direct ancestors plus optional siblings, with spouses limited to qualifying direct-line people. Full modern family shows the broader modern family (1850+). Full family GEDCOM shows the entire tree. On phones, the controls live in the Menu button so the map gets more breathing room.</div>
 
 <div class="control">
@@ -1042,7 +1042,10 @@ function render(fitToData) {
     }
   }
 
-  if (fitToData && visibleEvents.length) { map.fitBounds(L.latLngBounds(visibleEvents.map(ev=>[ev.lat, ev.lon])).pad(0.18), {maxZoom: 8}); }
+  if (fitToData && visibleEvents.length) {
+    map.once('moveend zoomend', () => scheduleRender(false, 0));
+    map.fitBounds(L.latLngBounds(visibleEvents.map(ev=>[ev.lat, ev.lon])).pad(0.18), {maxZoom: 8});
+  }
   renderSelectionOverlays(state.lastVisiblePeople, state.lastVisibleEvents, state.lastFirstVisibleEventByPerson);
   if (heavyViewportMode) { document.getElementById('detailHint').setAttribute('data-rendered', `${renderEvents.length}/${visibleEvents.length}`); } else { document.getElementById('detailHint').removeAttribute('data-rendered'); }
   if (state.focusedPersonId) showDetails(state.focusedPersonId);
@@ -1069,7 +1072,31 @@ function wireCollapseButtons() {
     });
   });
 }
-function setHomeFromInput() { const val = document.getElementById('homeInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.homeId = id; state.focusedPersonId = id; state.selectedPersonId = null; state.selectedBranches = new Set(); state.initializedDates = false; state.branchUiSig = null; applyImmediateFilterChange(true, 'Rebuilding the map around a new home person.', 'Refreshing the scope for the new home person.'); }
+function setHomeFromInput() {
+  const val = document.getElementById('homeInput').value.trim();
+  const id = peopleByName.get(val);
+  if (!id) return;
+  showLoading('Rebuilding the map around a new home person.', 'Refreshing the scope for the new home person.');
+  state.homeId = id;
+  state.focusedPersonId = id;
+  state.selectedPersonId = null;
+  state.popupPidToReopen = null;
+  state.selectedBranches = new Set();
+  state.initializedDates = false;
+  state.branchUiSig = null;
+  state.lastScopeSig = null;
+  state.currentScope = null;
+  state.lastVisiblePeople = new Set();
+  state.lastVisibleEvents = [];
+  state.lastFirstVisibleEventByPerson = new Map();
+  state.scopeCache = new Map();
+  const scope = computeScopeCached(state.homeId);
+  Promise.resolve(ensureDataForScope(scope)).finally(() => {
+    state.forceFullNextRender = true;
+    applyImmediateFilterChange(true, 'Rebuilding the map around a new home person.', 'Refreshing the scope for the new home person.');
+    requestAnimationFrame(() => scheduleRender(true, 0));
+  });
+}
 function focusPerson() { const val = document.getElementById('focusInput').value.trim(); const id = peopleByName.get(val); if (!id) return; state.focusedPersonId = id; state.selectedPersonId = id; state.popupPidToReopen = id; showDetails(id); renderSelectionOverlays(); scheduleRender(false, 0); const ev = bestEventForPerson(id, true) || bestEventForPerson(id, false); if (ev) map.setView([ev.lat, ev.lon], Math.max(map.getZoom(), 8)); }
 
 
