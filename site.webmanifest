@@ -1,0 +1,29 @@
+{
+  "name": "Genealogy Map",
+  "short_name": "Genealogy",
+  "description": "Genealogy map app with blue-and-white globe home-screen icon.",
+  "display": "standalone",
+  "background_color": "#1b6fc2",
+  "theme_color": "#1b6fc2",
+  "start_url": "./",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

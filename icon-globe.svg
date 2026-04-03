@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Blue and white globe icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e56aa"/>
+      <stop offset="1" stop-color="#3291dc"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="35%" cy="28%" r="60%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="8" dy="14" stdDeviation="12" flood-color="#000000" flood-opacity=".22"/>
+    </filter>
+  </defs>
+  <rect x="24" y="24" width="976" height="976" rx="220" fill="url(#bg)"/>
+  <rect x="24" y="24" width="976" height="976" rx="220" fill="url(#glow)"/>
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" filter="url(#shadow)">
+    <circle cx="512" cy="512" r="338" stroke-width="27" opacity=".98"/>
+    <ellipse cx="512" cy="512" rx="185" ry="338" stroke-width="27" opacity=".92"/>
+    <ellipse cx="512" cy="512" rx="277" ry="338" stroke-width="27" opacity=".92"/>
+    <ellipse cx="512" cy="512" rx="338" ry="95" stroke-width="27" opacity=".88"/>
+    <ellipse cx="512" cy="370" rx="270" ry="58" stroke-width="22" opacity=".72"/>
+    <ellipse cx="512" cy="654" rx="270" ry="58" stroke-width="22" opacity=".72"/>
+    <path d="M220 705c97 49 194 71 294 64 102-8 191-45 286-124" stroke-width="20" opacity=".74"/>
+  </g>
+  <rect x="36" y="36" width="952" height="952" rx="208" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="10"/>
+</svg>
